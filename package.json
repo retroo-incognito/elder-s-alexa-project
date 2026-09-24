@@ -1,0 +1,40 @@
+{
+  "name": "alexa-independence-agent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Alexa+ Everyday Independence Agent — voice-first agent for understanding digital information and completing everyday tasks safely",
+  "workspaces": [
+    "apps/*",
+    "mcp-server"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "dev:mcp": "npm run dev --workspace=mcp-server",
+    "dev:agent": "npm run dev --workspace=apps/agent",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "test": "npm run test --workspaces",
+    "lint": "npm run lint --workspaces"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  },
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/retroo-incognito/elder-s-alexa-project.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/retroo-incognito/elder-s-alexa-project/issues"
+  },
+  "homepage": "https://github.com/retroo-incognito/elder-s-alexa-project#readme"
+}

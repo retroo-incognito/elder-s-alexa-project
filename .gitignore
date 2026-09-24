@@ -1,0 +1,117 @@
+# ─────────────────────────────────────────────────────────────
+# Dependencies
+# ─────────────────────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# ─────────────────────────────────────────────────────────────
+# Build outputs
+# ─────────────────────────────────────────────────────────────
+dist/
+build/
+out/
+*.tsbuildinfo
+.vite/
+.turbo/
+
+# ─────────────────────────────────────────────────────────────
+# Environment & secrets
+# ─────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+credentials.json
+secrets.json
+
+# ─────────────────────────────────────────────────────────────
+# AWS
+# ─────────────────────────────────────────────────────────────
+.aws/
+.aws-sam/
+cdk.out/
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+terraform.tfvars
+*.auto.tfvars
+
+# ─────────────────────────────────────────────────────────────
+# Logs
+# ─────────────────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ─────────────────────────────────────────────────────────────
+# Testing & coverage
+# ─────────────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+*.lcov
+.vitest/
+
+# ─────────────────────────────────────────────────────────────
+# Editor / IDE
+# ─────────────────────────────────────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+
+# ─────────────────────────────────────────────────────────────
+# OS
+# ─────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# ─────────────────────────────────────────────────────────────
+# Runtime
+# ─────────────────────────────────────────────────────────────
+*.pid
+*.seed
+*.pid.lock
+pids/
+*.heapsnapshot
+
+# ─────────────────────────────────────────────────────────────
+# Demo artifacts (keep the script, drop the recordings)
+# ─────────────────────────────────────────────────────────────
+demo/screenshots/*
+!demo/screenshots/.gitkeep
+demo/recordings/
+demo/exports/
+*.mp4
+*.mov
+*.webm
+
+# ─────────────────────────────────────────────────────────────
+# Local scratch
+# ─────────────────────────────────────────────────────────────
+scratch/
+tmp/
+temp/
+*.bak
+*.orig
