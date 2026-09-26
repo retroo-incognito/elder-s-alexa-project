@@ -1,4 +1,4 @@
-import { converseJson } from '../lib/bedrock.js';
+import { converseJson } from '../lib/llm/index.js';
 import { logger } from '../lib/logger.js';
 import {
   PLANNER_SYSTEM_PROMPT,

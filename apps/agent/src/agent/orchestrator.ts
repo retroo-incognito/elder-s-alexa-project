@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { callTool } from '../lib/mcp-client.js';
-import { converse } from '../lib/bedrock.js';
+import { converse } from '../lib/llm/index.js';
 import { logger } from '../lib/logger.js';
 import { RESPONSE_SYSTEM_PROMPT } from './prompts.js';
 import { plan } from './planner.js';
