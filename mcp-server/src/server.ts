@@ -10,6 +10,13 @@ import { registerContextTools } from './tools/context.js';
 import { registerReminderTools } from './tools/reminders.js';
 import { registerMessagingTools } from './tools/messaging.js';
 
+
+interface SessionEntry {
+  server: McpServer;
+  transport: StreamableHTTPServerTransport;
+}
+
+const sessions = new Map<string, SessionEntry>();
 /**
  * Build a fresh McpServer with all seven tools registered.
  *
@@ -54,36 +61,42 @@ app.get('/health', (_req, res) => {
 // ─────────────────────────────────────────────────────────────
 app.post('/mcp', async (req, res) => {
   const sessionId = req.headers['mcp-session-id'] as string | undefined;
+  let entry: SessionEntry | undefined;
 
-  // In stateless mode every request starts a fresh server + transport.
-  // The SDK still requires an initialize request to establish the
-  // session handshake before any tool calls are accepted.
-  if (!sessionId && !isInitializeRequest(req.body)) {
+  if (sessionId && sessions.has(sessionId)) {
+    entry = sessions.get(sessionId)!;
+  } else if (!sessionId && isInitializeRequest(req.body)) {
+    // Fresh initialize — create a new server + transport pair.
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+      onsessioninitialized: (sid) => {
+        sessions.set(sid, { server, transport });
+      },
+    });
+
+    const server = buildServer();
+
+    transport.onclose = () => {
+      if (transport.sessionId) sessions.delete(transport.sessionId);
+    };
+
+    await server.connect(transport);
+    entry = { server, transport };
+  } else {
     res.status(400).json({
       jsonrpc: '2.0',
       error: {
         code: -32000,
         message:
-          'Bad Request: no session ID and body is not an initialize request.',
+          'Bad Request: no valid session ID and body is not an initialize request.',
       },
       id: null,
     });
     return;
   }
 
-  const server = buildServer();
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined, // stateless
-  });
-
-  res.on('close', () => {
-    void transport.close();
-    void server.close();
-  });
-
   try {
-    await server.connect(transport);
-    await transport.handleRequest(req, res, req.body);
+    await entry.transport.handleRequest(req, res, req.body);
   } catch (err) {
     console.error('[mcp] POST handler error:', err);
     if (!res.headersSent) {
@@ -101,24 +114,14 @@ app.post('/mcp', async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 app.get('/mcp', async (req, res) => {
   const sessionId = req.headers['mcp-session-id'] as string | undefined;
-  if (!sessionId) {
-    res.status(400).send('Missing Mcp-Session-Id header');
+  if (!sessionId || !sessions.has(sessionId)) {
+    res.status(400).send('Invalid or missing Mcp-Session-Id header');
     return;
   }
 
-  const server = buildServer();
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-  });
-
-  res.on('close', () => {
-    void transport.close();
-    void server.close();
-  });
-
+  const entry = sessions.get(sessionId)!;
   try {
-    await server.connect(transport);
-    await transport.handleRequest(req, res);
+    await entry.transport.handleRequest(req, res);
   } catch (err) {
     console.error('[mcp] GET handler error:', err);
     if (!res.headersSent) res.status(500).send('Internal server error');
@@ -130,24 +133,14 @@ app.get('/mcp', async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 app.delete('/mcp', async (req, res) => {
   const sessionId = req.headers['mcp-session-id'] as string | undefined;
-  if (!sessionId) {
-    res.status(400).send('Missing Mcp-Session-Id header');
+  if (!sessionId || !sessions.has(sessionId)) {
+    res.status(400).send('Invalid or missing Mcp-Session-Id header');
     return;
   }
 
-  const server = buildServer();
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-  });
-
-  res.on('close', () => {
-    void transport.close();
-    void server.close();
-  });
-
+  const entry = sessions.get(sessionId)!;
   try {
-    await server.connect(transport);
-    await transport.handleRequest(req, res);
+    await entry.transport.handleRequest(req, res);
   } catch (err) {
     console.error('[mcp] DELETE handler error:', err);
     if (!res.headersSent) res.status(500).send('Internal server error');
