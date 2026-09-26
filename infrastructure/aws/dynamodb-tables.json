@@ -1,0 +1,47 @@
+{
+  "tables": [
+    {
+      "name": "independence-users",
+      "keys": { "partition": "userId" },
+      "billingMode": "PAY_PER_REQUEST"
+    },
+    {
+      "name": "independence-context",
+      "keys": { "partition": "userId", "sort": "contextId" },
+      "gsis": [
+        {
+          "name": "KeyIndex",
+          "partition": "userId",
+          "sort": "key",
+          "projection": "ALL"
+        }
+      ],
+      "ttl": "expiresAt",
+      "billingMode": "PAY_PER_REQUEST"
+    },
+    {
+      "name": "independence-reminders",
+      "keys": { "partition": "userId", "sort": "reminderId" },
+      "gsis": [
+        {
+          "name": "StatusIndex",
+          "partition": "userId",
+          "sort": "status",
+          "projection": "ALL"
+        }
+      ],
+      "billingMode": "PAY_PER_REQUEST"
+    },
+    {
+      "name": "independence-message-drafts",
+      "keys": { "partition": "userId", "sort": "draftId" },
+      "billingMode": "PAY_PER_REQUEST"
+    },
+    {
+      "name": "independence-conversations",
+      "keys": { "partition": "userId", "sort": "conversationId" },
+      "ttl": "expiresAt",
+      "billingMode": "PAY_PER_REQUEST"
+    }
+  ]
+}
