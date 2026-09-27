@@ -108,27 +108,27 @@ export async function handleMessage(input: AgentInput): Promise<AgentOutput> {
   const state = getOrCreateState(input.userId, input.conversationId);
   recordTurn(state, "user", input.message);
 
-  const Plan = await plan(input.message, state);
+  const planResult = await plan(input.message, state);
   logger.info("Planned intent", {
     conversationId: input.conversationId,
-    intent: Plan.intent,
-    reasoning: Plan.reasoning,
+    intent: planResult.intent,
+    reasoning: planResult.reasoning,
   });
 
   let output: AgentOutput;
 
-  switch (Plan.intent) {
+  switch (planResult.intent) {
     case "UNDERSTAND_MESSAGE":
-      output = await handleUnderstand(state, Plan);
+      output = await handleUnderstand(state, input.message);
       break;
     case "FOLLOW_UP":
       output = await handleFollowUp(state, input.message);
       break;
     case "CREATE_REMINDER":
-      output = await handleCreateReminder(state, input.message, Plan);
+      output = await handleCreateReminder(state, input.message, planResult);
       break;
     case "DRAFT_MESSAGE":
-      output = await handleDraftMessage(state, input.message, Plan);
+      output = await handleDraftMessage(state, input.message, planResult);
       break;
     case "CONFIRM_SEND":
       output = await handleConfirmSend(state, input.message);
@@ -137,7 +137,7 @@ export async function handleMessage(input: AgentInput): Promise<AgentOutput> {
       output = handleDenySend(state);
       break;
     case "RETRIEVE_CONTEXT":
-      output = await handleRetrieveContext(state, input.message, Plan);
+      output = await handleRetrieveContext(state, input.message, planResult);
       break;
     case "LIST_REMINDERS":
       output = await handleListReminders(state);
@@ -157,19 +157,37 @@ export async function handleMessage(input: AgentInput): Promise<AgentOutput> {
 
 async function handleUnderstand(
   state: ConversationState,
-  _plan: Plan,
+  userMessage: string,
 ): Promise<AgentOutput> {
-  const { content, source } = getCurrentMessage();
+  // Analyze the user's actual message first.
+  const directAnalysis = await callTool<AnalyzeMessageResult>(
+    "analyze_message",
+    {
+      content: userMessage,
+      source: "user_message",
+    },
+  );
 
-  const analyzed = await callTool<AnalyzeMessageResult>("analyze_message", {
-    content,
-    source,
-  });
+  let analyzed: AnalyzeMessageResult;
+  let usedSource: string;
+
+  if (directAnalysis.entities.length > 0) {
+    analyzed = directAnalysis;
+    usedSource = "user_message";
+  } else {
+    // The user referred to a message without pasting it.
+    // Fall back to the demo fixture.
+    const { content, source } = getCurrentMessage();
+    analyzed = await callTool<AnalyzeMessageResult>("analyze_message", {
+      content,
+      source,
+    });
+    usedSource = source;
+  }
 
   const actions: AgentAction[] = [];
-
-  // Persist extracted entities as authorized context.
   let activeContext: ContextMatch | null = state.activeContext;
+
   for (const entity of analyzed.entities) {
     const saved = await callTool<{ contextId: string; saved: boolean }>(
       "save_context",
@@ -178,7 +196,7 @@ async function handleUnderstand(
         type: entity.type,
         key: entity.key,
         data: entity.data,
-        source,
+        source: usedSource,
       },
     );
 
@@ -206,7 +224,7 @@ async function handleUnderstand(
         role: "user",
         content:
           `The user received this message and asked you to explain it.\n\n` +
-          `Message:\n${content}\n\n` +
+          `Message:\n${userMessage}\n\n` +
           `Extracted summary: ${analyzed.summary}\n\n` +
           `Reply in one or two short spoken sentences.`,
       },
@@ -295,7 +313,7 @@ async function handleCreateReminder(
   const combinedMessage = state.pendingReminderMessage
     ? `${state.pendingReminderMessage} ${message}`
     : message;
-    state.pendingReminderMessage = null;
+  state.pendingReminderMessage = null;
 
   const scheduledAt = parseReminderDate(combinedMessage, ctx);
   const title = deriveReminderTitle(ctx);

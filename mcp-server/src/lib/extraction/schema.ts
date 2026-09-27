@@ -1,31 +1,31 @@
-import * as z from 'zod/v4';
+import * as z from "zod/v4";
 
 export const FactSchema = z.object({
   label: z.string().describe('Short label, e.g. "Amount" or "Due date".'),
-  value: z.string().describe('The value as written or rendered.'),
+  value: z.string().describe("The value as written or rendered."),
 });
 
 export const EntitySchema = z.object({
   type: z
     .string()
     .describe(
-      'Short category: bill, appointment, statement, notice, event, ' +
-        'delivery, subscription, insurance, circular, or similar.',
+      "Short category: bill, appointment, statement, notice, event, " +
+        "delivery, subscription, insurance, circular, or similar.",
     ),
   key: z
     .string()
     .describe(
-      'Stable snake_case identifier, e.g. electricity_bill, ' +
-        'dr_meera_appointment, school_circular.',
+      "Stable snake_case identifier, e.g. electricity_bill, " +
+        "dr_meera_appointment, school_circular.",
     ),
   data: z
     .string()
     .describe(
-      'A JSON-encoded object of extracted fields. Use field names that ' +
-        'match the content: amount, currency, dueDate, provider, ' +
-        'doctorName, appointmentDate, appointmentTime, location, ' +
-        'trackingNumber, premium, policyNumber, etc. Values must be ' +
-        'string, number, or boolean. Example: ' +
+      "A JSON-encoded object of extracted fields. Use field names that " +
+        "match the content: amount, currency, dueDate, provider, " +
+        "doctorName, appointmentDate, appointmentTime, location, " +
+        "trackingNumber, premium, policyNumber, etc. Values must be " +
+        "string, number, or boolean. Example: " +
         '{"provider":"Electricity Company","amount":1842,"currency":"INR","dueDate":"2026-10-15"}',
     ),
 });
@@ -34,23 +34,23 @@ export const ExtractionSchema = z.object({
   summary: z
     .string()
     .describe(
-      'One or two plain-language sentences explaining what this message is.',
+      "One or two plain-language sentences explaining what this message is.",
     ),
   facts: z
     .array(FactSchema)
-    .describe('Key facts a person would want to know at a glance.'),
+    .describe("Key facts a person would want to know at a glance."),
   entities: z
     .array(EntitySchema)
     .describe(
-      'Structured records for persistent context. Most messages produce ' +
-        'one entity; a message covering two separate matters produces two.',
+      "Structured records for persistent context. Most messages produce " +
+        "one entity; a message covering two separate matters produces two.",
     ),
   questionsAnswerableFromSource: z
     .array(z.string())
     .describe(
-      'Questions whose answers appear literally in the source. This ' +
-        'becomes an allow-list: the agent may answer only these and must ' +
-        'say the source does not cover anything else. Be strict.',
+      "Questions whose answers appear literally in the source. This " +
+        "becomes an allow-list: the agent may answer only these and must " +
+        "say the source does not cover anything else. Be strict.",
     ),
 });
 
@@ -88,6 +88,19 @@ actually contained in the message. This list becomes the agent's grounding
 boundary — anything not on it will be answered with "the message doesn't say."
 Be strict. It is better to leave a question off the list than to include one
 the source cannot answer.
+
+The user's input may wrap the actual message in conversational framing,
+for example:
+  "I got this from my doctor: <the appointment text> I don't understand it."
+  "Here is the message: <message text>"
+  "Can you explain this? <message text>"
+
+In such cases, extract from the underlying message text, not the framing.
+The framing tells you where the message came from, not what it says.
+
+If the input contains no actual message content — only a reference like
+"I got a message from the electricity company. I don't understand it." —
+return empty entities and an empty facts array. Do not invent content.
 `.trim();
 
 /**

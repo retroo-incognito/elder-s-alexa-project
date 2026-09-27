@@ -1,10 +1,8 @@
-import { converseJson } from '../lib/llm/index.js';
-import { logger } from '../lib/logger.js';
-import {
-  PLANNER_SYSTEM_PROMPT,
-} from './prompts.js';
-import { isAffirmative, isNegative } from './safety.js';
-import type { ConversationState, Plan } from '../models/schemas.js';
+import { converseJson } from "../lib/llm/index.js";
+import { logger } from "../lib/logger.js";
+import { PLANNER_SYSTEM_PROMPT } from "./prompts.js";
+import { isAffirmative, isNegative } from "./safety.js";
+import type { ConversationState, Plan } from "../models/schemas.js";
 
 export async function plan(
   message: string,
@@ -16,15 +14,15 @@ export async function plan(
   if (state.pendingConfirmation) {
     if (isAffirmative(message)) {
       return {
-        intent: 'CONFIRM_SEND',
-        reasoning: 'Pending confirmation and user replied affirmatively.',
+        intent: "CONFIRM_SEND",
+        reasoning: "Pending confirmation and user replied affirmatively.",
         extractedReference: null,
       };
     }
     if (isNegative(message)) {
       return {
-        intent: 'DENY_SEND',
-        reasoning: 'Pending confirmation and user declined.',
+        intent: "DENY_SEND",
+        reasoning: "Pending confirmation and user declined.",
         extractedReference: null,
       };
     }
@@ -36,25 +34,25 @@ export async function plan(
         key: state.activeContext.key,
         data: state.activeContext.data,
       })
-    : 'none';
+    : "none";
 
   const pendingSummary = state.pendingConfirmation
     ? JSON.stringify({
         recipient: state.pendingConfirmation.recipient,
         message: state.pendingConfirmation.message,
       })
-    : 'none';
+    : "none";
 
   const recentTurns = state.recentTurns
     .slice(-4)
     .map((t) => `${t.role}: ${t.text}`)
-    .join(' | ');
+    .join(" | ");
 
   const userContent = `
 Current state:
 - Active context: ${stateContext}
 - Pending confirmation: ${pendingSummary}
-- Recent turns: ${recentTurns || 'none'}
+- Recent turns: ${recentTurns || "none"}
 
 User message: "${message}"
 `.trim();
@@ -62,17 +60,17 @@ User message: "${message}"
   try {
     return await converseJson<Plan>({
       system: PLANNER_SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userContent }],
+      messages: [{ role: "user", content: userContent }],
       temperature: 0,
       maxTokens: 256,
     });
   } catch (err) {
-    logger.error('Planner failed, defaulting to UNKNOWN', {
+    logger.error("Planner failed, defaulting to UNKNOWN", {
       error: (err as Error).message,
     });
     return {
-      intent: 'UNKNOWN',
-      reasoning: 'Planner failure; safe fallback.',
+      intent: "UNKNOWN",
+      reasoning: "Planner failure; safe fallback.",
       extractedReference: null,
     };
   }
