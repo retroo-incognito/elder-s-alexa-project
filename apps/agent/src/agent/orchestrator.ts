@@ -262,11 +262,15 @@ async function handleFollowUp(
       {
         role: "user",
         content:
-          `Context (the only source you may use):\n` +
+          `Context type: ${state.activeContext.type}\n` +
+          `Context label: ${state.activeContext.key}\n\n` +
+          `Context data (the only source you may use):\n` +
           `${JSON.stringify(state.activeContext.data, null, 2)}\n\n` +
           `User question: ${message}\n\n` +
-          `Answer strictly from the context. If the answer is not in the context, ` +
-          `say so plainly and do not guess. One or two short sentences.`,
+          `Answer strictly from the context. If the user says "it" or "that", ` +
+          `they mean the ${state.activeContext.type} above. If the answer is ` +
+          `not in the context, say so plainly and do not guess. One or two ` +
+          `short sentences.`,
       },
     ],
     temperature: 0.2,
@@ -619,11 +623,10 @@ function parseReminderDate(
   message: string,
   context: ContextMatch | null,
 ): string {
-  const ctxData = context?.data as Record<string, unknown> | undefined;
-  const ctxDue = ctxData?.dueDate as string | undefined;
+  const contextDate = findContextDate(context);
 
   // ── 1. "N days before" (or "N days before the due date") ─────────
-  if (ctxDue && /\bdays?\s+before\b/i.test(message)) {
+  if (contextDate && /\bdays?\s+before\b/i.test(message)) {
     const wordToNum: Record<string, number> = {
       one: 1,
       two: 2,
@@ -643,24 +646,47 @@ function parseReminderDate(
       const raw = match[1].toLowerCase();
       const days = /^\d+$/.test(raw) ? Number(raw) : (wordToNum[raw] ?? 0);
       if (days > 0) {
-        const base = new Date(`${ctxDue}T09:00:00Z`);
-        if (!Number.isNaN(base.getTime())) {
-          base.setUTCDate(base.getUTCDate() - days);
-          return base.toISOString();
-        }
+        const base = new Date(contextDate);
+        base.setUTCDate(base.getUTCDate() - days);
+        return base.toISOString();
       }
     }
   }
 
-  // ── 2. Anchor for day-of-month parsing ───────────────────────────
-  // Prefer the context's due date as the reference month.
-  let reference = new Date();
-  if (ctxDue) {
-    const parsed = new Date(`${ctxDue}T00:00:00Z`);
-    if (!Number.isNaN(parsed.getTime())) reference = parsed;
+  // ── 2. "The day before" / "the day after" / "same day" ──────────
+  // These have no number — they anchor directly to the context date.
+  if (contextDate) {
+    const lower = message.toLowerCase();
+
+    if (
+      /\b(?:the\s+)?day\s+before\b|\bday\s+prior\b|\bday\s+earlier\b/.test(
+        lower,
+      )
+    ) {
+      const d = new Date(contextDate);
+      d.setUTCDate(d.getUTCDate() - 1);
+      return d.toISOString();
+    }
+
+    if (/\b(?:the\s+)?day\s+after\b|\bthe\s+next\s+day\b/.test(lower)) {
+      const d = new Date(contextDate);
+      d.setUTCDate(d.getUTCDate() + 1);
+      return d.toISOString();
+    }
+
+    if (/\b(?:the\s+)?same\s+day\b|\bon\s+that\s+day\b/.test(lower)) {
+      return new Date(contextDate).toISOString();
+    }
   }
 
-  // ── 3. "on the Nth" / "on Nth" ───────────────────────────────────
+  // ── 3. Anchor for day-of-month parsing ───────────────────────────
+  // Prefer the context's date as the reference month.
+  let reference = new Date();
+  if (contextDate) {
+    reference = new Date(contextDate);
+  }
+
+  // ── 4. "on the Nth" / "on Nth" ───────────────────────────────────
   const dayMatch = message.match(
     /\b(?:on\s+the\s+|on\s+)?(\d{1,2})(?:st|nd|rd|th)?\b/i,
   );
@@ -674,7 +700,6 @@ function parseReminderDate(
         reference.getUTCMonth() === now.getUTCMonth() &&
         reference.getUTCFullYear() === now.getUTCFullYear();
 
-      // "Remind me on the 26th" said on the 26th → one hour from now.
       if (isToday) {
         const soon = new Date(now.getTime() + 60 * 60 * 1000);
         soon.setUTCSeconds(0, 0);
@@ -693,7 +718,6 @@ function parseReminderDate(
         ),
       );
 
-      // If the candidate is more than a day in the past, roll forward a month.
       if (candidate.getTime() < Date.now() - 24 * 60 * 60 * 1000) {
         candidate.setUTCMonth(candidate.getUTCMonth() + 1);
       }
@@ -702,7 +726,7 @@ function parseReminderDate(
     }
   }
 
-  // ── 4. "tomorrow" ────────────────────────────────────────────────
+  // ── 5. "tomorrow" ────────────────────────────────────────────────
   if (/\btomorrow\b/i.test(message)) {
     const t = new Date();
     t.setUTCDate(t.getUTCDate() + 1);
@@ -710,11 +734,119 @@ function parseReminderDate(
     return t.toISOString();
   }
 
-  // ── 5. Fallback: tomorrow at 9 AM UTC ────────────────────────────
+  // ── 6. Fallback: tomorrow at 9 AM UTC ────────────────────────────
   const fallback = new Date();
   fallback.setUTCDate(fallback.getUTCDate() + 1);
   fallback.setUTCHours(9, 0, 0, 0);
   return fallback.toISOString();
+}
+
+const MONTH_NAMES = [
+  "january",
+  "february",
+  "march",
+  "april",
+  "may",
+  "june",
+  "july",
+  "august",
+  "september",
+  "october",
+  "november",
+  "december",
+];
+
+/**
+ * Parses "12 November", "November 12", or either with an explicit year,
+ * constructing the result in UTC. Never uses local-timezone parsing —
+ * that path shifts the day when the machine is east of UTC.
+ */
+function parseNaturalDate(value: string): Date | null {
+  // "12 November" or "12 November 2026"
+  const dmy = value.match(/^(\d{1,2})\s+([A-Za-z]+)(?:\s+(\d{4}))?$/);
+  if (dmy) {
+    const day = Number(dmy[1]);
+    const monthIdx = MONTH_NAMES.indexOf(dmy[2].toLowerCase());
+    const year = dmy[3] ? Number(dmy[3]) : new Date().getUTCFullYear();
+    if (monthIdx >= 0 && day >= 1 && day <= 31) {
+      return new Date(Date.UTC(year, monthIdx, day, 9, 0, 0, 0));
+    }
+  }
+
+  // "November 12" or "November 12, 2026" or "November 12 2026"
+  const mdy = value.match(/^([A-Za-z]+)\s+(\d{1,2})(?:,?\s+(\d{4}))?$/);
+  if (mdy) {
+    const monthIdx = MONTH_NAMES.indexOf(mdy[1].toLowerCase());
+    const day = Number(mdy[2]);
+    const year = mdy[3] ? Number(mdy[3]) : new Date().getUTCFullYear();
+    if (monthIdx >= 0 && day >= 1 && day <= 31) {
+      return new Date(Date.UTC(year, monthIdx, day, 9, 0, 0, 0));
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Finds the most relevant date on a context record.
+ *
+ * Bills use `dueDate`, appointments use `appointmentDate`, events
+ * use `eventDate`. This tries a small set of known keys and returns
+ * the first one that parses to a valid date. Returns null if the
+ * context has no date field we recognise.
+ */
+function findContextDate(context: ContextMatch | null): Date | null {
+  if (!context) return null;
+
+  const data = context.data as Record<string, unknown>;
+  const candidates = [
+    "dueDate",
+    "appointmentDate",
+    "eventDate",
+    "deadline",
+    "renewalDate",
+    "expiryDate",
+    "date",
+  ];
+
+  for (const key of candidates) {
+    const value = data[key];
+    if (typeof value !== "string" || value.length === 0) continue;
+
+    // ISO date-only ("2026-10-15") or full datetime ("2026-10-15T09:00:00Z").
+    // Both parse as UTC by specification — safe to manipulate directly.
+    if (
+      /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:?\d{2})?)?$/.test(
+        value,
+      )
+    ) {
+      const d = new Date(value);
+      if (!Number.isNaN(d.getTime())) {
+        d.setUTCHours(9, 0, 0, 0);
+        return d;
+      }
+    }
+
+    // Try direct ISO parse first.
+    const direct = new Date(value);
+    if (!Number.isNaN(direct.getTime())) {
+      direct.setUTCHours(9, 0, 0, 0);
+      return direct;
+    }
+
+     // Natural language ("12 November", "November 12"). Parse in UTC
+    // to avoid the local-timezone shift that produced the off-by-one.
+    const natural = parseNaturalDate(value);
+    if (natural) {
+      // If the date already passed this year, roll to next year.
+      if (natural.getTime() < Date.now()) {
+        natural.setUTCFullYear(natural.getUTCFullYear() + 1);
+      }
+      return natural;
+    }
+  }
+
+  return null;
 }
 
 function deriveReminderTitle(ctx: ContextMatch): string {

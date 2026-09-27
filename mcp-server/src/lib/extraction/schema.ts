@@ -101,6 +101,9 @@ The framing tells you where the message came from, not what it says.
 If the input contains no actual message content — only a reference like
 "I got a message from the electricity company. I don't understand it." —
 return empty entities and an empty facts array. Do not invent content.
+When a field is a date, normalize it to ISO 8601 (YYYY-MM-DD) in the
+'data' object. Keep the original natural-language form only in the 'facts'
+array, which is meant for display.
 `.trim();
 
 /**
