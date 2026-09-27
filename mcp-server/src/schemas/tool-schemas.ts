@@ -1,4 +1,4 @@
-import * as z from 'zod/v4';
+import * as z from "zod/v4";
 
 // ─────────────────────────────────────────────────────────────
 // Tool 1 — analyze_message
@@ -8,7 +8,7 @@ export const AnalyzeMessageInput = z.object({
   content: z
     .string()
     .min(1)
-    .describe('The raw text of the message or document to analyze'),
+    .describe("The raw text of the message or document to analyze"),
   source: z
     .string()
     .describe(
@@ -17,7 +17,7 @@ export const AnalyzeMessageInput = z.object({
 });
 
 export const AnalyzeMessageOutput = z.object({
-  summary: z.string().describe('One-sentence plain-language summary'),
+  summary: z.string().describe("One-sentence plain-language summary"),
   facts: z
     .array(
       z.object({
@@ -25,22 +25,20 @@ export const AnalyzeMessageOutput = z.object({
         value: z.string(),
       }),
     )
-    .describe('Key facts extracted from the source'),
+    .describe("Key facts extracted from the source"),
   entities: z
     .array(
       z.object({
-        type: z
-          .string()
-          .describe('e.g. "bill", "appointment", "deadline"'),
+        type: z.string().describe('e.g. "bill", "appointment", "deadline"'),
         key: z.string().describe('Stable identifier, e.g. "electricity_bill"'),
         data: z.record(z.string(), z.unknown()),
       }),
     )
-    .describe('Structured entities suitable for save_context'),
+    .describe("Structured entities suitable for save_context"),
   questionsAnswerableFromSource: z
     .array(z.string())
     .describe(
-      'Questions the agent can answer using ONLY this source. Anything not listed here must not be guessed.',
+      "Questions the agent can answer using ONLY this source. Anything not listed here must not be guessed.",
     ),
 });
 
@@ -49,16 +47,20 @@ export const AnalyzeMessageOutput = z.object({
 // ─────────────────────────────────────────────────────────────
 
 export const GetContextInput = z.object({
-  userId: z.string().describe('The user whose context is being retrieved'),
+  userId: z.string().describe("The user whose context is being retrieved"),
   query: z
     .string()
     .describe(
       'Natural-language or key-based query, e.g. "electricity bill" or "that bill"',
     ),
   type: z
-    .enum(['bill', 'appointment', 'document', 'general'])
+    .string()
+    .min(1)
+    .max(40)
     .optional()
-    .describe('Restrict search to a known context type'),
+    .describe(
+      "Restrict search to a known context type, e.g. bill, appointment, event.",
+    ),
 });
 
 export const GetContextOutput = z.object({
@@ -79,21 +81,28 @@ export const GetContextOutput = z.object({
 
 export const SaveContextInput = z.object({
   userId: z.string(),
-  type: z.enum(['bill', 'appointment', 'document', 'general']),
-  key: z
+  type: z
     .string()
     .min(1)
-    .describe('Stable identifier, e.g. "electricity_bill"'),
+    .max(40)
+    .describe(
+      "Category of context. Known values: bill, appointment, event, " +
+        "notice, delivery, statement, subscription, insurance, circular, " +
+        "document, general.",
+    ),
+  key: z.string().min(1).describe('Stable identifier, e.g. "electricity_bill"'),
   data: z
     .record(z.string(), z.unknown())
-    .describe('The authorized fact payload. Do not include sensitive fields the user did not approve.'),
-  source: z.string().describe('Provenance, e.g. the originating message id'),
+    .describe(
+      "The authorized fact payload. Do not include sensitive fields the user did not approve.",
+    ),
+  source: z.string().describe("Provenance, e.g. the originating message id"),
   ttlDays: z
     .number()
     .int()
     .positive()
     .optional()
-    .describe('Optional expiry in days. Omit for indefinite retention.'),
+    .describe("Optional expiry in days. Omit for indefinite retention."),
 });
 
 export const SaveContextOutput = z.object({
@@ -110,7 +119,9 @@ export const CreateReminderInput = z.object({
   title: z.string().min(1),
   scheduledAt: z
     .string()
-    .describe('ISO 8601 datetime with timezone offset, e.g. 2026-09-26T09:00:00+05:30'),
+    .describe(
+      "ISO 8601 datetime with timezone offset, e.g. 2026-09-26T09:00:00+05:30",
+    ),
   relatedContextId: z.string().optional(),
 });
 
@@ -125,7 +136,7 @@ export const CreateReminderOutput = z.object({
 
 export const GetRemindersInput = z.object({
   userId: z.string(),
-  status: z.enum(['active', 'completed', 'cancelled']).default('active'),
+  status: z.enum(["active", "completed", "cancelled"]).default("active"),
 });
 
 export const GetRemindersOutput = z.object({
@@ -145,10 +156,8 @@ export const GetRemindersOutput = z.object({
 
 export const DraftFamilyMessageInput = z.object({
   userId: z.string(),
-  recipient: z
-    .string()
-    .describe('Relationship or name, e.g. "daughter"'),
-  content: z.string().min(1).describe('The proposed message body'),
+  recipient: z.string().describe('Relationship or name, e.g. "daughter"'),
+  content: z.string().min(1).describe("The proposed message body"),
   relatedContextId: z.string().optional(),
 });
 
@@ -160,7 +169,7 @@ export const DraftFamilyMessageOutput = z.object({
   confirmationToken: z
     .string()
     .describe(
-      'Opaque token. Must be passed back to send_family_message after the user confirms.',
+      "Opaque token. Must be passed back to send_family_message after the user confirms.",
     ),
 });
 
@@ -174,7 +183,7 @@ export const SendFamilyMessageInput = z.object({
   confirmationToken: z
     .string()
     .describe(
-      'The token issued when the draft was created. Proves the send follows a real draft.',
+      "The token issued when the draft was created. Proves the send follows a real draft.",
     ),
   userConfirmation: z
     .string()

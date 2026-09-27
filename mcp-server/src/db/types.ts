@@ -7,8 +7,15 @@ export interface UserProfile {
   preferences: Record<string, unknown>;
   createdAt: string; // ISO 8601
 }
-
-export type ContextType = 'bill' | 'appointment' | 'document' | 'general';
+/**
+ * Context type. The extractor produces these dynamically — the list
+ * below is documentation, not enforcement. Any short non-empty string
+ * is accepted. Known values from the extraction prompt:
+ *
+ *   bill, appointment, event, notice, delivery, statement,
+ *   subscription, insurance, circular, document, general
+ */
+export type ContextType = string;
 
 export interface ContextRecord {
   userId: UserId;
@@ -73,3 +80,4 @@ export interface MessageDraftRecord {
   confirmedAt?: string;
   sentAt?: string;
 }
+
