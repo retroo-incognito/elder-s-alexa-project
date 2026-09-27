@@ -1,4 +1,12 @@
+import { config as loadEnv } from 'dotenv';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { z } from 'zod';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Walk from mcp-server/src/ up to the repo root, then load .env.
+loadEnv({ path: resolve(__dirname, '../../.env') });
 
 const EnvSchema = z.object({
   AWS_REGION: z.string().default('us-east-1'),
@@ -12,9 +20,13 @@ const EnvSchema = z.object({
   MCP_SERVER_PORT: z.coerce.number().default(3001),
   MCP_SERVER_BASE_URL: z.string().default('http://localhost:3001'),
 
-  BEDROCK_MODEL_ID: z
-    .string()
-    .default('anthropic.claude-3-5-sonnet-20241022-v2:0'),
+  // Extraction provider (analyze_message)
+  ANALYZE_PROVIDER: z.enum(['bedrock', 'openai']).default('openai'),
+  OPENAI_API_KEY: z.string().min(1),
+  OPENAI_EXTRACTION_MODEL: z.string().default('gpt-4.1'),
+
+  // Bedrock (only used when ANALYZE_PROVIDER=bedrock)
+  BEDROCK_MODEL_ID: z.string().default('us.anthropic.claude-sonnet-4-6'),
 });
 
 const parsed = EnvSchema.safeParse(process.env);
