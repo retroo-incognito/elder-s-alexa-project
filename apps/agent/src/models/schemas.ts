@@ -31,6 +31,7 @@ export interface ConversationState {
   recentTurns: Array<{ role: 'user' | 'agent'; text: string; at: string }>;
   activeContext: ContextMatch | null;
   pendingConfirmation: PendingConfirmation | null;
+  pendingReminderMessage: string | null;
   createdAt: string;
   updatedAt: string;
 }

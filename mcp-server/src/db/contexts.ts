@@ -1,12 +1,8 @@
-import {
-  PutCommand,
-  QueryCommand,
-  DeleteCommand,
-} from '@aws-sdk/lib-dynamodb';
-import { randomUUID } from 'crypto';
-import { ddb } from './client.js';
-import { config } from '../config.js';
-import type { ContextRecord, ContextType, UserId } from './types.js';
+import { PutCommand, QueryCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
+import { randomUUID } from "crypto";
+import { ddb } from "./client.js";
+import { config } from "../config.js";
+import type { ContextRecord, ContextType, UserId } from "./types.js";
 
 const TABLE = config.DYNAMODB_CONTEXT_TABLE;
 
@@ -53,10 +49,10 @@ export async function getContextByKey(
   const result = await ddb.send(
     new QueryCommand({
       TableName: TABLE,
-      IndexName: 'KeyIndex',
-      KeyConditionExpression: 'userId = :u AND #k = :k',
-      ExpressionAttributeNames: { '#k': 'key' },
-      ExpressionAttributeValues: { ':u': userId, ':k': key },
+      IndexName: "KeyIndex",
+      KeyConditionExpression: "userId = :u AND #k = :k",
+      ExpressionAttributeNames: { "#k": "key" },
+      ExpressionAttributeValues: { ":u": userId, ":k": key },
       Limit: 1,
       ScanIndexForward: false,
     }),
@@ -71,8 +67,8 @@ export async function getContextById(
   const result = await ddb.send(
     new QueryCommand({
       TableName: TABLE,
-      KeyConditionExpression: 'userId = :u AND contextId = :c',
-      ExpressionAttributeValues: { ':u': userId, ':c': contextId },
+      KeyConditionExpression: "userId = :u AND contextId = :c",
+      ExpressionAttributeValues: { ":u": userId, ":c": contextId },
       Limit: 1,
     }),
   );
@@ -92,15 +88,24 @@ export async function findRecentByType(
   const result = await ddb.send(
     new QueryCommand({
       TableName: TABLE,
-      KeyConditionExpression: 'userId = :u',
-      FilterExpression: '#t = :t',
-      ExpressionAttributeNames: { '#t': 'type' },
-      ExpressionAttributeValues: { ':u': userId, ':t': type },
-      Limit: limit,
-      ScanIndexForward: false,
+      KeyConditionExpression: "userId = :u",
+      FilterExpression: "#t = :t",
+      ExpressionAttributeNames: { "#t": "type" },
+      ExpressionAttributeValues: { ":u": userId, ":t": type },
+      // Fetch more than we need, then sort by createdAt in code.
+      Limit: limit * 5,
     }),
   );
-  return (result.Items ?? []) as ContextRecord[];
+
+  const items = (result.Items ?? []) as ContextRecord[];
+
+  // DynamoDB can only sort by the sort key (contextId, a UUID here),
+  // so we sort by createdAt ourselves and take the newest N.
+  items.sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+
+  return items.slice(0, limit);
 }
 
 export async function deleteContext(

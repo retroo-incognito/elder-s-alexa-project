@@ -12,8 +12,9 @@
     "dev:mcp": "npm run dev --workspace=mcp-server",
     "dev:agent": "npm run dev --workspace=apps/agent",
     "dev:web": "npm run dev --workspace=apps/web",
-    "test": "npm run test --workspaces",
-    "lint": "npm run lint --workspaces"
+    "test": "npm run test --workspaces --if-present",
+    "test:watch": "vitest --watch",
+    "lint": "npm run lint --workspaces --if-present"
   },
   "engines": {
     "node": ">=20.0.0"
