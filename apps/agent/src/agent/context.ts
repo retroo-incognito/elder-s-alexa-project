@@ -1,11 +1,11 @@
-import { callTool } from '../lib/mcp-client.js';
-import type { ContextMatch } from '../models/schemas.js';
+import { callTool } from "../lib/mcp-client.js";
+import type { ContextMatch } from "../models/schemas.js";
 
 interface GetContextResult {
   matches: ContextMatch[];
 }
 
-const VAGUE = new Set(['it', 'that', 'this', 'that one', 'the one', 'them']);
+const VAGUE = new Set(["it", "that", "this", "that one", "the one", "them"]);
 
 function isVague(reference: string | null): boolean {
   if (!reference) return true;
@@ -38,10 +38,10 @@ export async function resolveContext(
     }
   }
 
-  const query = reference?.trim() || activeContext?.key || '';
+  const query = reference?.trim() || activeContext?.key || "";
   if (!query) return activeContext;
 
-  const result = await callTool<GetContextResult>('get_context', {
+  const result = await callTool<GetContextResult>("get_context", {
     userId,
     query,
   });
@@ -54,8 +54,17 @@ export async function resolveContext(
  * Returns "daughter" from "tell my daughter about it".
  */
 export function extractRecipient(message: string): string {
-  const match = message.match(
-    /\b(?:tell|message|text|notify|inform)\s+(?:my\s+|our\s+)?([a-zA-Z]+)/i,
+  // Pattern 1: "tell my daughter", "message my son", "text my wife"
+  const direct = message.match(
+    /\b(?:tell|message|text|notify|inform|call)\s+(?:my\s+|our\s+)?([a-zA-Z]+)/i,
   );
-  return match?.[1]?.toLowerCase() ?? 'family';
+  if (direct?.[1]) return direct[1].toLowerCase();
+
+  // Pattern 2: "send ... to my sister", "share ... with my brother"
+  const indirect = message.match(
+    /\b(?:send|share|forward|give|show)\b[^.]*?\b(?:to|with)\s+(?:my\s+|our\s+)?([a-zA-Z]+)/i,
+  );
+  if (indirect?.[1]) return indirect[1].toLowerCase();
+
+  return "family";
 }

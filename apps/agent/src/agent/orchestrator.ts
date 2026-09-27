@@ -222,8 +222,8 @@ async function handleUnderstand(
 
   // state.activeContext = activeContext;
   state.activeContext = activeContext
-  ? { ...activeContext, sourceContent }
-  : null;
+    ? { ...activeContext, sourceContent }
+    : null;
 
   const reply = await converse({
     system: RESPONSE_SYSTEM_PROMPT,
@@ -246,7 +246,6 @@ async function handleUnderstand(
     context: activeContext,
     actions,
     pendingConfirmation: null,
-    
   };
 }
 
@@ -885,6 +884,24 @@ function composeMessageFromContext(ctx: ContextMatch): string {
         })
       : "soon";
     return `My electricity bill is ${prettyAmount} and it's due ${prettyDue}.`;
+  }
+
+  if (ctx.type === "event" || ctx.type === "invitation") {
+    const name = (data.eventName as string) ?? "an event";
+    const date = data.eventDate as string | undefined;
+    const time = data.eventTime as string | undefined;
+    const location = data.location as string | undefined;
+
+    const sentences: string[] = [`I wanted to let you know about ${name}.`];
+    const when = [date, time].filter(Boolean).join(" at ");
+    if (when && location) {
+      sentences.push(`It's on ${when} at ${location}.`);
+    } else if (when) {
+      sentences.push(`It's on ${when}.`);
+    } else if (location) {
+      sentences.push(`It's at ${location}.`);
+    }
+    return sentences.join(" ");
   }
 
   return `I wanted to let you know about ${ctx.key}.`;
