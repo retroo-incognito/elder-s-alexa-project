@@ -1,7 +1,17 @@
 import { useRef, useState } from 'react';
 
+interface SpeechRecognitionAlternativeLike {
+  transcript: string;
+}
+
+interface SpeechRecognitionResultLike {
+  isFinal: boolean;
+  0: SpeechRecognitionAlternativeLike;
+}
+
 interface SpeechRecognitionEventLike {
-  results: ArrayLike<ArrayLike<{ transcript: string }>>;
+  resultIndex: number;
+  results: ArrayLike<SpeechRecognitionResultLike>;
 }
 
 interface SpeechRecognitionLike {
@@ -19,7 +29,9 @@ interface SpeechRecognitionLike {
 type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
 
 interface Props {
-  onTranscript: (text: string) => void;
+  onStart: () => void;
+  onFinalTranscript: (text: string) => void;
+  onInterimTranscript: (text: string) => void;
   disabled: boolean;
 }
 
@@ -31,7 +43,12 @@ function getCtor(): SpeechRecognitionCtor | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
-export function VoiceInput({ onTranscript, disabled }: Props) {
+export function VoiceInput({
+  onStart,
+  onFinalTranscript,
+  onInterimTranscript,
+  disabled,
+}: Props) {
   const [listening, setListening] = useState(false);
   const [unsupported, setUnsupported] = useState(false);
   const ref = useRef<SpeechRecognitionLike | null>(null);
@@ -50,18 +67,44 @@ export function VoiceInput({ onTranscript, disabled }: Props) {
 
     const rec = new Ctor();
     rec.lang = 'en-IN';
-    rec.interimResults = false;
+    rec.interimResults = true;
     rec.maxAlternatives = 1;
     rec.continuous = false;
 
     rec.onresult = (e) => {
-      const text = e.results[0]?.[0]?.transcript ?? '';
-      if (text) onTranscript(text);
+      let finalText = '';
+      let interimText = '';
+
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const result = e.results[i];
+        const transcript = result[0]?.transcript ?? '';
+        if (result.isFinal) {
+          finalText += transcript;
+        } else {
+          interimText += transcript;
+        }
+      }
+
+      if (finalText) {
+        onFinalTranscript(finalText.trim());
+        onInterimTranscript('');
+      } else if (interimText) {
+        onInterimTranscript(interimText);
+      }
     };
-    rec.onend = () => setListening(false);
-    rec.onerror = () => setListening(false);
+
+    rec.onend = () => {
+      setListening(false);
+      onInterimTranscript('');
+    };
+
+    rec.onerror = () => {
+      setListening(false);
+      onInterimTranscript('');
+    };
 
     ref.current = rec;
+    onStart();          // ← signal App to reset before we start
     rec.start();
     setListening(true);
   }

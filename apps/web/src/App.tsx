@@ -1,18 +1,18 @@
-import { useEffect, useRef, useState } from 'react';
-import { sendMessage } from './lib/agentClient';
-import { Conversation } from './components/Conversation';
-import { ContextPanel } from './components/ContextPanel';
-import { ActionsPanel } from './components/ActionsPanel';
-import { ConfirmationPrompt } from './components/ConfirmationPrompt';
-import { VoiceInput } from './components/VoiceInput';
+import { useEffect, useRef, useState } from "react";
+import { sendMessage } from "./lib/agentClient";
+import { Conversation } from "./components/Conversation";
+import { ContextPanel } from "./components/ContextPanel";
+import { ActionsPanel } from "./components/ActionsPanel";
+import { ConfirmationPrompt } from "./components/ConfirmationPrompt";
+import { VoiceInput } from "./components/VoiceInput";
 import type {
   AgentAction,
   ContextMatch,
   PendingConfirmation,
   Turn,
-} from './types';
+} from "./types";
 
-const SESSION_KEY = 'independence-agent.conversationId';
+const SESSION_KEY = "independence-agent.conversationId";
 
 function newId(): string {
   return crypto.randomUUID();
@@ -31,8 +31,9 @@ export default function App() {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [context, setContext] = useState<ContextMatch | null>(null);
   const [actions, setActions] = useState<AgentAction[]>([]);
+  const [interim, setInterim] = useState("");
   const [pending, setPending] = useState<PendingConfirmation | null>(null);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -46,11 +47,11 @@ export default function App() {
     if (!trimmed || busy) return;
 
     setBusy(true);
-    setInput('');
+    setInput("");
 
     const userTurn: Turn = {
       id: newId(),
-      role: 'user',
+      role: "user",
       text: trimmed,
       at: new Date().toISOString(),
     };
@@ -63,7 +64,7 @@ export default function App() {
         ...prev,
         {
           id: newId(),
-          role: 'agent',
+          role: "agent",
           text: res.reply,
           at: new Date().toISOString(),
         },
@@ -81,7 +82,7 @@ export default function App() {
         ...prev,
         {
           id: newId(),
-          role: 'agent',
+          role: "agent",
           text: (err as Error).message,
           at: new Date().toISOString(),
           error: true,
@@ -94,7 +95,7 @@ export default function App() {
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>): void {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       void submit(input);
     }
@@ -108,7 +109,7 @@ export default function App() {
     setContext(null);
     setActions([]);
     setPending(null);
-    setInput('');
+    setInput("");
   }
 
   return (
@@ -117,7 +118,8 @@ export default function App() {
         <div>
           <h1 className="app__title">Everyday Independence Agent</h1>
           <p className="app__subtitle">
-            Simulated Alexa+ experience — voice-first help for everyday digital tasks.
+            Simulated Alexa+ experience — voice-first help for everyday digital
+            tasks.
           </p>
         </div>
         <button type="button" className="app__reset" onClick={reset}>
@@ -135,8 +137,8 @@ export default function App() {
           {pending && (
             <ConfirmationPrompt
               pending={pending}
-              onConfirm={() => void submit('Yes.')}
-              onDeny={() => void submit('No.')}
+              onConfirm={() => void submit("Yes.")}
+              onDeny={() => void submit("No.")}
               disabled={busy}
             />
           )}
@@ -146,21 +148,30 @@ export default function App() {
               ref={inputRef}
               className="composer__input"
               rows={1}
-              placeholder="Say something…"
-              value={input}
+              placeholder={interim ? "" : "Say something…"}
+              value={interim || input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKeyDown}
               disabled={busy}
+              readOnly={Boolean(interim)}
             />
             <VoiceInput
-              onTranscript={(t) => setInput((cur) => (cur ? `${cur} ${t}` : t))}
+              onStart={() => {
+                setInput("");
+                setInterim("");
+              }}
+              onFinalTranscript={(t) => {
+                setInput(t);
+                setInterim("");
+              }}
+              onInterimTranscript={setInterim}
               disabled={busy}
             />
             <button
               type="button"
               className="composer__send"
               onClick={() => void submit(input)}
-              disabled={busy || input.trim().length === 0}
+              disabled={busy || (input.trim().length === 0 && !interim)}
             >
               Send
             </button>
