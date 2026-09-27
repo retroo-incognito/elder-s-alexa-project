@@ -573,3 +573,28 @@ code {
     max-height: 260px;
   }
 }
+
+.context-card__source {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--border);
+  background: var(--bg);
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.context-card__source-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 4px;
+}
+
+.context-card__source-text {
+  font-size: 12px;
+  color: var(--ink-muted);
+  line-height: 1.5;
+  max-height: 120px;
+  overflow-y: auto;
+}

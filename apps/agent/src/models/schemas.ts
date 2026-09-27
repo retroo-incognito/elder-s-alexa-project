@@ -4,6 +4,7 @@ export interface ContextMatch {
   key: string;
   data: Record<string, unknown>;
   createdAt: string;
+   sourceContent?: string;
 }
 
 export interface AnalyzeMessageResult {

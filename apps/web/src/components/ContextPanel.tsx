@@ -1,34 +1,63 @@
-import type { ContextMatch } from '../types';
+import type { ContextMatch } from "../types";
 
 interface Props {
   context: ContextMatch | null;
 }
 
 function formatCurrency(amount: unknown, currency: unknown): string | null {
-  if (typeof amount !== 'number') return null;
-  const cur = typeof currency === 'string' ? currency : 'INR';
+  if (typeof amount !== "number") return null;
+  const cur = typeof currency === "string" ? currency : "INR";
   try {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
       currency: cur,
       maximumFractionDigits: 0,
     }).format(amount);
   } catch {
-    return `${cur} ${amount.toLocaleString('en-IN')}`;
+    return `${cur} ${amount.toLocaleString("en-IN")}`;
   }
 }
 
 function formatDate(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
+  if (typeof value !== "string") return null;
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString('en-IN', {
-    weekday: 'short',
-    month: 'long',
-    day: 'numeric',
+  return d.toLocaleDateString("en-IN", {
+    weekday: "short",
+    month: "long",
+    day: "numeric",
   });
 }
 
+function renderFieldValue(key: string, value: unknown): string {
+  if (typeof value !== "string") return String(value);
+
+  // Dates — format consistently
+  if (/date$/i.test(key) || key === "dueDate" || key === "deadline") {
+    const d = new Date(value);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleDateString("en-IN", {
+        weekday: "short",
+        month: "long",
+        day: "numeric",
+      });
+    }
+    // "12 November" style — pass through
+    return value;
+  }
+
+  // Times — keep as-is
+  if (/time$/i.test(key)) return value;
+
+  return value;
+}
+
+function formatFieldLabel(key: string): string {
+  return key
+    .replace(/([A-Z])/g, " $1")
+    .replace(/^./, (c) => c.toUpperCase())
+    .trim();
+}
 export function ContextPanel({ context }: Props) {
   if (!context) {
     return (
@@ -43,12 +72,18 @@ export function ContextPanel({ context }: Props) {
   }
 
   const { data, type, key } = context;
-
-  if (type === 'bill') {
+  {
+    context.sourceContent && (
+      <div className="context-card__source">
+        <div className="context-card__source-label">From</div>
+        <div className="context-card__source-text">{context.sourceContent}</div>
+      </div>
+    );
+  }
+  if (type === "bill") {
     const amount = formatCurrency(data.amount, data.currency);
     const dueDate = formatDate(data.dueDate);
-    const provider =
-      typeof data.provider === 'string' ? data.provider : 'Bill';
+    const provider = typeof data.provider === "string" ? data.provider : "Bill";
 
     return (
       <div className="context-card">
@@ -83,8 +118,8 @@ export function ContextPanel({ context }: Props) {
       </div>
       {Object.entries(data).map(([k, v]) => (
         <div key={k} className="context-card__field">
-          <span className="context-card__label">{k}</span>
-          <span className="context-card__value">{String(v)}</span>
+          <span className="context-card__label">{formatFieldLabel(k)}</span>
+          <span className="context-card__value">{renderFieldValue(k, v)}</span>
         </div>
       ))}
       <div className="context-card__footer">

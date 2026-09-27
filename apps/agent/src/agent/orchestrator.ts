@@ -168,6 +168,11 @@ async function handleUnderstand(
     },
   );
 
+  const sourceContent =
+    directAnalysis.entities.length > 0
+      ? userMessage
+      : getCurrentMessage().content;
+
   let analyzed: AnalyzeMessageResult;
   let usedSource: string;
 
@@ -215,7 +220,10 @@ async function handleUnderstand(
     });
   }
 
-  state.activeContext = activeContext;
+  // state.activeContext = activeContext;
+  state.activeContext = activeContext
+  ? { ...activeContext, sourceContent }
+  : null;
 
   const reply = await converse({
     system: RESPONSE_SYSTEM_PROMPT,
@@ -238,6 +246,7 @@ async function handleUnderstand(
     context: activeContext,
     actions,
     pendingConfirmation: null,
+    
   };
 }
 
@@ -834,7 +843,7 @@ function findContextDate(context: ContextMatch | null): Date | null {
       return direct;
     }
 
-     // Natural language ("12 November", "November 12"). Parse in UTC
+    // Natural language ("12 November", "November 12"). Parse in UTC
     // to avoid the local-timezone shift that produced the off-by-one.
     const natural = parseNaturalDate(value);
     if (natural) {
