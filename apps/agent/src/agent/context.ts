@@ -7,6 +7,71 @@ interface GetContextResult {
 
 const VAGUE = new Set(["it", "that", "this", "that one", "the one", "them"]);
 
+const RELATIONSHIP_WORDS = new Set([
+  "mother",
+  "mom",
+  "mum",
+  "mummy",
+  "father",
+  "dad",
+  "daddy",
+  "sister",
+  "brother",
+  "daughter",
+  "son",
+  "wife",
+  "husband",
+  "spouse",
+  "aunt",
+  "uncle",
+  "cousin",
+  "nephew",
+  "niece",
+  "grandmother",
+  "grandfather",
+  "grandma",
+  "grandpa",
+  "friend",
+  "relative",
+  "family",
+  "partner",
+  "neighbour",
+  "neighbor",
+]);
+
+const STOP_WORDS = new Set([
+  "a",
+  "an",
+  "the",
+  "this",
+  "that",
+  "it",
+  "one",
+  "to",
+  "with",
+  "about",
+  "for",
+  "from",
+  "of",
+  "and",
+  "or",
+  "them",
+  "him",
+  "her",
+  "message",
+  "note",
+  "text",
+]);
+
+function normalizeRelationship(word: string): string | null {
+  if (RELATIONSHIP_WORDS.has(word)) return word;
+  if (word.endsWith("s")) {
+    const singular = word.slice(0, -1);
+    if (RELATIONSHIP_WORDS.has(singular)) return singular;
+  }
+  return null;
+}
+
 function isVague(reference: string | null): boolean {
   if (!reference) return true;
   const r = reference.toLowerCase().trim();
@@ -54,17 +119,39 @@ export async function resolveContext(
  * Returns "daughter" from "tell my daughter about it".
  */
 export function extractRecipient(message: string): string {
-  // Pattern 1: "tell my daughter", "message my son", "text my wife"
-  const direct = message.match(
-    /\b(?:tell|message|text|notify|inform|call)\s+(?:my\s+|our\s+)?([a-zA-Z]+)/i,
-  );
-  if (direct?.[1]) return direct[1].toLowerCase();
+  const lower = message.toLowerCase();
 
-  // Pattern 2: "send ... to my sister", "share ... with my brother"
-  const indirect = message.match(
-    /\b(?:send|share|forward|give|show)\b[^.]*?\b(?:to|with)\s+(?:my\s+|our\s+)?([a-zA-Z]+)/i,
+  // Pattern 1: possessive + known relationship word anywhere in the
+  // message. Catches "my daughter", "our son", "one of my relatives".
+  // This must run first — it is the most reliable signal.
+  const possessive = lower.match(/\b(?:my|our)\s+([a-z]+)/g);
+  if (possessive) {
+    for (const match of possessive) {
+      const word = match.replace(/^(?:my|our)\s+/, "");
+      const rel = normalizeRelationship(word);
+      if (rel) return rel;
+    }
+  }
+
+  // Pattern 2: direct verb + name. "tell Priya", "notify Ramesh".
+  // Excludes ambiguous verbs ("message") that double as nouns.
+  const direct = lower.match(
+    /\b(?:tell|notify|inform|call)\s+(?:my\s+|our\s+)?([a-z]+)/i,
   );
-  if (indirect?.[1]) return indirect[1].toLowerCase();
+  if (direct?.[1] && !STOP_WORDS.has(direct[1])) {
+    return direct[1];
+  }
+
+  // Pattern 3: send/share/forward ... to/with <relationship>.
+  // Only fires if the captured word is a known relationship,
+  // which prevents "to one" and similar fragments.
+  const indirect = lower.match(
+    /\b(?:send|share|forward|give)\b[^.!?]*?\b(?:to|with)\s+(?:my\s+|our\s+)?([a-z]+)/i,
+  );
+  if (indirect?.[1]) {
+    const rel = normalizeRelationship(indirect[1]);
+    if (rel) return rel;
+  }
 
   return "family";
 }
