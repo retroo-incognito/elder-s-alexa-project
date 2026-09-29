@@ -8,7 +8,8 @@
     "build": "tsc",
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "seed:contacts": "tsx ../infrastructure/scripts/seed-contacts.ts"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.600.0",

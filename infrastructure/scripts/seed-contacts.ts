@@ -1,11 +1,10 @@
 import { config as loadEnv } from 'dotenv';
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { resolve } from 'node:path';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-loadEnv({ path: resolve(__dirname, '../../.env') });
+loadEnv({ path: resolve(process.cwd(), 'infrastructure/scripts/../../.env') });
+loadEnv({ path: resolve(process.cwd(), '.env') });
 
-import { saveContact, listContacts } from '../src/db/contacts.js';
+import { saveContact, listContacts } from '../../mcp-server/src/db/contacts.js';
 
 const DEMO_USER_ID = process.env.AGENT_USER_ID ?? 'demo-user';
 
@@ -27,6 +26,18 @@ const SEED_CONTACTS = [
     displayName: 'Rohan Sharma',
     channel: 'Email',
     address: 'rohan.sharma@example.com',
+  },
+  {
+    relationship: 'mother',
+    displayName: 'Durga Sharma',
+    channel: 'Email',
+    address: 'durga.sharma@example.com',
+  },
+  {
+    relationship: 'father',
+    displayName: 'Rajesh Sharma',
+    channel: 'Email',
+    address: 'rajesh.sharma@example.com',
   },
 ];
 

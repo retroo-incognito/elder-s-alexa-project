@@ -43,11 +43,14 @@ create_table independence-context \
   --billing-mode PAY_PER_REQUEST
 
 # Enable TTL on contexts
-aws dynamodb update-time-to-live \
+if aws dynamodb update-time-to-live \
   --table-name independence-context \
   --time-to-live-specification "Enabled=true,AttributeName=expiresAt" \
-  --region "$REGION" >/dev/null
-echo "✓ TTL enabled on independence-context"
+  --region "$REGION" >/dev/null 2>&1; then
+  echo "✓ TTL enabled on independence-context"
+else
+  echo "✓ TTL already enabled on independence-context"
+fi
 
 # ── Reminders (with StatusIndex GSI) ───────────────────────────
 create_table independence-reminders \
@@ -90,13 +93,14 @@ create_table independence-conversations \
       AttributeName=conversationId,KeyType=RANGE \
   --billing-mode PAY_PER_REQUEST
 
-aws dynamodb update-time-to-live \
+if aws dynamodb update-time-to-live \
   --table-name independence-conversations \
   --time-to-live-specification "Enabled=true,AttributeName=expiresAt" \
-  --region "$REGION" >/dev/null
-echo "✓ TTL enabled on independence-conversations"
-
-echo ""
+  --region "$REGION" >/dev/null 2>&1; then
+  echo "✓ TTL enabled on independence-conversations"
+else
+  echo "✓ TTL already enabled on independence-conversations"
+fi
 echo "All tables ready in $REGION."
 
 

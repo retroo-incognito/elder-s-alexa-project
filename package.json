@@ -14,7 +14,8 @@
     "dev:web": "npm run dev --workspace=apps/web",
     "test": "npm run test --workspaces --if-present",
     "test:watch": "vitest --watch",
-    "lint": "npm run lint --workspaces --if-present"
+    "lint": "npm run lint --workspaces --if-present",
+    "seed:contacts": "tsx infrastructure/scripts/seed-contacts.ts"
   },
   "engines": {
     "node": ">=20.0.0"
@@ -33,7 +34,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "bugs": {
     "url": "https://github.com/retroo-incognito/elder-s-alexa-project/issues"
   },
