@@ -72,14 +72,12 @@ export function ContextPanel({ context }: Props) {
   }
 
   const { data, type, key } = context;
-  {
-    context.sourceContent && (
+  const source = context.sourceContent && (
       <div className="context-card__source">
         <div className="context-card__source-label">From</div>
         <div className="context-card__source-text">{context.sourceContent}</div>
       </div>
     );
-  }
   if (type === "bill") {
     const amount = formatCurrency(data.amount, data.currency);
     const dueDate = formatDate(data.dueDate);
@@ -90,6 +88,7 @@ export function ContextPanel({ context }: Props) {
         <div className="context-card__header">
           <span className="context-card__badge">{provider}</span>
         </div>
+        {source}
         {amount && (
           <div className="context-card__field">
             <span className="context-card__label">Amount</span>
@@ -116,6 +115,7 @@ export function ContextPanel({ context }: Props) {
       <div className="context-card__header">
         <span className="context-card__badge">{type}</span>
       </div>
+      {source}
       {Object.entries(data).map(([k, v]) => (
         <div key={k} className="context-card__field">
           <span className="context-card__label">{formatFieldLabel(k)}</span>
