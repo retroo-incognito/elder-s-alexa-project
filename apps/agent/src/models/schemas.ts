@@ -21,7 +21,7 @@ export interface AnalyzeMessageResult {
 export interface PendingConfirmation {
   draftId: string;
   confirmationToken: string;
-  recipient: string;
+  recipient: ContactMatch;
   message: string;
   createdAt: string;
 }
@@ -32,7 +32,7 @@ export interface ConversationState {
   recentTurns: Array<{ role: 'user' | 'agent'; text: string; at: string }>;
   activeContext: ContextMatch | null;
   pendingConfirmation: PendingConfirmation | null;
-  pendingReminderMessage: string | null;
+  pendingReminderMessage: string | null;  
   createdAt: string;
   updatedAt: string;
 }
@@ -92,12 +92,4 @@ export interface ContactSuggestion {
   relationship: string;
   displayName: string;
   channel: string;
-}
-
-export interface PendingConfirmation {
-  draftId: string;
-  confirmationToken: string;
-  recipient: ContactMatch;   // ← was string
-  message: string;
-  createdAt: string;
 }
