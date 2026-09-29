@@ -6,6 +6,7 @@ import {
   SendFamilyMessageOutput,
 } from '../schemas/tool-schemas.js';
 import * as drafts from '../db/drafts.js';
+import * as contacts from '../db/contacts.js';
 import {
   issueConfirmationToken,
   tokensMatch,
@@ -17,28 +18,41 @@ export function registerMessagingTools(server: McpServer): void {
     {
       title: 'Draft Family Message',
       description:
-        'Prepare a message to a family member. This tool does NOT send anything. ' +
-        'It returns a draftId and a confirmationToken. ' +
-        'You must show the draft to the user and wait for explicit confirmation ' +
-        'before calling send_family_message with the same draftId and token.',
+        'Prepare a message to a specific contact. This tool does NOT send anything. ' +
+        'You must first call resolve_contact to get a valid contactId. ' +
+        'Returns a draftId and a confirmationToken. Show the draft to the user ' +
+        'and wait for explicit confirmation before calling send_family_message.',
       inputSchema: DraftFamilyMessageInput,
       outputSchema: DraftFamilyMessageOutput,
     },
-    async ({ userId, recipient, content, relatedContextId }) => {
+    async ({ userId, contactId, content, relatedContextId }) => {
+      const contact = await contacts.getContact(userId, contactId);
+      if (!contact) {
+        throw new Error(
+          `Contact ${contactId} not found for user ${userId}. ` +
+            `Call resolve_contact first.`,
+        );
+      }
+
       const token = issueConfirmationToken();
       const record = await drafts.createDraft({
         userId,
-        recipient,
+        recipient: contact.displayName,
         content,
         relatedContextId,
       });
 
-      // Persist the token on the draft so send can validate it later.
       await drafts.attachConfirmationToken(userId, record.draftId, token);
 
       const result = {
         draftId: record.draftId,
-        recipient,
+        recipient: {
+          contactId: contact.contactId,
+          relationship: contact.relationship,
+          displayName: contact.displayName,
+          channel: contact.channel,
+          address: contact.address,
+        },
         message: content,
         requiresConfirmation: true as const,
         confirmationToken: token,
@@ -55,72 +69,35 @@ export function registerMessagingTools(server: McpServer): void {
     {
       title: 'Send Family Message',
       description:
-        'Send a previously drafted message. ' +
-        'This tool will REJECT the call unless: ' +
-        '(1) the draftId exists and is still in "draft" status, ' +
-        '(2) the confirmationToken matches the one issued when the draft was created, and ' +
-        '(3) userConfirmation contains the user actual confirmation words. ' +
-        'Never call this without having shown the draft to the user and received their explicit yes.',
+        'Send a previously drafted message. REJECTS unless all guards pass: ' +
+        '(1) draftId exists, (2) draft status is still "draft", ' +
+        '(3) confirmationToken matches, (4) userConfirmation is non-empty. ' +
+        'Never call without having shown the draft to the user and received their yes.',
       inputSchema: SendFamilyMessageInput,
       outputSchema: SendFamilyMessageOutput,
     },
     async ({ userId, draftId, confirmationToken, userConfirmation }) => {
       const draft = await drafts.getDraft(userId, draftId);
 
-      // ── Guard 1: draft must exist ──────────────────────────
       if (!draft) {
-        const rejected = {
-          sent: false,
-          draftId,
-          rejectionReason: 'No draft found for this user and draftId.',
-        };
-        return {
-          content: [{ type: 'text', text: JSON.stringify(rejected) }],
-          structuredContent: rejected,
-        };
+        return reject(draftId, 'No draft found for this user and draftId.');
       }
-
-      // ── Guard 2: draft must still be in "draft" status ─────
       if (draft.status !== 'draft') {
-        const rejected = {
-          sent: false,
+        return reject(
           draftId,
-          rejectionReason: `Draft is in status "${draft.status}" — cannot send.`,
-        };
-        return {
-          content: [{ type: 'text', text: JSON.stringify(rejected) }],
-          structuredContent: rejected,
-        };
+          `Draft is in status "${draft.status}" — cannot send.`,
+        );
       }
-
-      // ── Guard 3: confirmation token must match ─────────────
       if (!tokensMatch(draft.confirmationToken, confirmationToken)) {
-        const rejected = {
-          sent: false,
+        return reject(
           draftId,
-          rejectionReason:
-            'Confirmation token does not match the token issued for this draft.',
-        };
-        return {
-          content: [{ type: 'text', text: JSON.stringify(rejected) }],
-          structuredContent: rejected,
-        };
+          'Confirmation token does not match the token issued for this draft.',
+        );
       }
-
-      // ── Guard 4: user confirmation must be non-empty ───────
       if (!userConfirmation || userConfirmation.trim().length === 0) {
-        const rejected = {
-          sent: false,
-          draftId,
-          rejectionReason: 'No user confirmation provided.',
-        };
-        return {
-          content: [{ type: 'text', text: JSON.stringify(rejected) }],
-          structuredContent: rejected,
-        };
+        return reject(draftId, 'No user confirmation provided.');
       }
 
-      // ── All guards passed: advance the lifecycle atomically ─
       await drafts.markConfirmed(userId, draftId);
       await drafts.markSent(userId, draftId);
 
@@ -135,4 +112,12 @@ export function registerMessagingTools(server: McpServer): void {
       };
     },
   );
+}
+
+function reject(draftId: string, reason: string) {
+  const result = { sent: false, draftId, rejectionReason: reason };
+  return {
+    content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+    structuredContent: result,
+  };
 }

@@ -78,3 +78,26 @@ export interface Plan {
   reasoning: string;
   extractedReference: string | null;
 }
+
+export interface ContactMatch {
+  contactId: string;
+  relationship: string;
+  displayName: string;
+  channel: string;
+  address: string;
+}
+
+export interface ContactSuggestion {
+  contactId: string;
+  relationship: string;
+  displayName: string;
+  channel: string;
+}
+
+export interface PendingConfirmation {
+  draftId: string;
+  confirmationToken: string;
+  recipient: ContactMatch;   // ← was string
+  message: string;
+  createdAt: string;
+}

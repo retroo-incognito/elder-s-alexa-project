@@ -43,3 +43,19 @@ export interface Turn {
   at: string;
   error?: boolean;
 }
+
+export interface ContactMatch {
+  contactId: string;
+  relationship: string;
+  displayName: string;
+  channel: string;
+  address: string;
+}
+
+export interface PendingConfirmation {
+  draftId: string;
+  confirmationToken: string;
+  recipient: ContactMatch;
+  message: string;
+  createdAt: string;
+}

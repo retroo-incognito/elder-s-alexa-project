@@ -3,6 +3,7 @@ import { registerAnalyzeMessage } from './tools/analyze-message.js';
 import { registerContextTools } from './tools/context.js';
 import { registerReminderTools } from './tools/reminders.js';
 import { registerMessagingTools } from './tools/messaging.js';
+import { registerContactTools } from './tools/contacts.js';
 
 /**
  * Build a fresh McpServer with all seven tools registered.
@@ -19,6 +20,7 @@ export function buildServer(): McpServer {
   registerContextTools(server);
   registerReminderTools(server);
   registerMessagingTools(server);
+  registerContactTools(server);
 
   return server;
 }

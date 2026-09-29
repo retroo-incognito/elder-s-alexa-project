@@ -4,3 +4,4 @@ export * as contexts from './contexts.js';
 export * as reminders from './reminders.js';
 export * as drafts from './drafts.js';
 export * as conversations from './conversations.js';
+export * as contacts from './contacts.js';

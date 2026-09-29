@@ -16,6 +16,7 @@ const EnvSchema = z.object({
   DYNAMODB_REMINDERS_TABLE: z.string().default('independence-reminders'),
   DYNAMODB_DRAFTS_TABLE: z.string().default('independence-message-drafts'),
   DYNAMODB_CONVERSATIONS_TABLE: z.string().default('independence-conversations'),
+  DYNAMODB_CONTACTS_TABLE: z.string().default('independence-contacts'),
 
   MCP_SERVER_PORT: z.coerce.number().default(3001),
   MCP_SERVER_BASE_URL: z.string().default('http://localhost:3001'),

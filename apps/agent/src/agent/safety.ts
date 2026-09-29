@@ -13,6 +13,7 @@ const TOOL_LEVELS: Record<string, SafetyLevel> = {
   create_reminder: SafetyLevel.LOW_RISK,
   draft_family_message: SafetyLevel.LOW_RISK,
   send_family_message: SafetyLevel.EXTERNAL_COMMS,
+  resolve_contact: SafetyLevel.READ,
 };
 
 export function getSafetyLevel(toolName: string): SafetyLevel {
@@ -30,7 +31,9 @@ export function requiresConfirmation(toolName: string): boolean {
  */
 export function isAffirmative(message: string): boolean {
   const m = message.toLowerCase().trim();
-  return /^(yes|yeah|yep|sure|ok|okay|go ahead|send it|please do|do it)\b/.test(m);
+  return /^(yes|yeah|yep|sure|ok|okay|go ahead|send it|please do|do it)\b/.test(
+    m,
+  );
 }
 
 export function isNegative(message: string): boolean {

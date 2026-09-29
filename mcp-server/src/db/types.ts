@@ -81,3 +81,17 @@ export interface MessageDraftRecord {
   sentAt?: string;
 }
 
+export interface ContactRecord {
+  userId: UserId;
+  contactId: string;
+  /** The word the user says: "sister", "daughter", "Priya". */
+  relationship: string;
+  /** The real name shown to the user: "Priya Sharma". */
+  displayName: string;
+  /** "whatsapp" | "sms" | "email" | any channel string. */
+  channel: string;
+  /** Phone number, email address, or handle. */
+  address: string;
+  createdAt: string;
+}
+

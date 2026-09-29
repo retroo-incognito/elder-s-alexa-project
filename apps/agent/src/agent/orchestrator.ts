@@ -11,6 +11,8 @@ import type {
   AgentInput,
   AgentOutput,
   AnalyzeMessageResult,
+  ContactMatch,
+  ContactSuggestion,
   ContextMatch,
   ConversationState,
   PendingConfirmation,
@@ -23,6 +25,12 @@ import type {
 
 const conversations = new Map<string, ConversationState>();
 const STATE_TTL_MS = 30 * 60 * 1000;
+
+interface ResolveContactResult {
+  found: boolean;
+  contact?: ContactMatch;
+  suggestions: ContactSuggestion[];
+}
 
 function now(): string {
   return new Date().toISOString();
@@ -360,21 +368,125 @@ async function handleCreateReminder(
   };
 }
 
+// async function handleDraftMessage(
+//   state: ConversationState,
+//   message: string,
+//   plan: Plan,
+// ): Promise<AgentOutput> {
+//   const ctx = await resolveContext(
+//     state.userId,
+//     plan.extractedReference,
+//     state.activeContext,
+//   );
+
+//   if (!ctx) {
+//     return {
+//       reply:
+//         "I can send a message, but I need to know what it's about first. Could you tell me what you'd like to share?",
+//       conversationId: state.conversationId,
+//       context: null,
+//       actions: [],
+//       pendingConfirmation: null,
+//     };
+//   }
+
+//   const recipient = extractRecipient(message);
+//   if (recipient === null) {
+//     return {
+//       reply:
+//         "Happy to send that. Which relative would you like me to send it to — " +
+//         "your sister, your daughter, or someone else?",
+//       conversationId: state.conversationId,
+//       context: ctx,
+//       actions: [],
+//       pendingConfirmation: null,
+//     };
+//   }
+//   const body = composeMessageFromContext(ctx);
+
+//   const draft = await callTool<{
+//     draftId: string;
+//     recipient: string;
+//     message: string;
+//     requiresConfirmation: true;
+//     confirmationToken: string;
+//   }>("draft_family_message", {
+//     userId: state.userId,
+//     recipient,
+//     content: body,
+//     relatedContextId: ctx.contextId,
+//   });
+
+//   const pending: PendingConfirmation = {
+//     draftId: draft.draftId,
+//     confirmationToken: draft.confirmationToken,
+//     recipient: draft.recipient,
+//     message: draft.message,
+//     createdAt: now(),
+//   };
+//   state.pendingConfirmation = pending;
+
+//   return {
+//     reply: `I can send your ${recipient} a message saying: "${draft.message}" Should I send it?`,
+//     conversationId: state.conversationId,
+//     context: ctx,
+//     actions: [
+//       {
+//         type: "message_drafted",
+//         summary: `Draft prepared for ${recipient}`,
+//         at: now(),
+//       },
+//     ],
+//     pendingConfirmation: pending,
+//   };
+// }
+
 async function handleDraftMessage(
   state: ConversationState,
   message: string,
   plan: Plan,
 ): Promise<AgentOutput> {
-  const ctx = await resolveContext(
+  // ── Step 1: resolve the context ─────────────────────────
+  let ctx = await resolveContext(
     state.userId,
     plan.extractedReference,
     state.activeContext,
   );
 
   if (!ctx) {
+    const directAnalysis = await callTool<AnalyzeMessageResult>(
+      "analyze_message",
+      { content: message, source: "user_message" },
+    );
+
+    if (directAnalysis.entities.length > 0) {
+      const entity = directAnalysis.entities[0];
+      const saved = await callTool<{ contextId: string; saved: boolean }>(
+        "save_context",
+        {
+          userId: state.userId,
+          type: entity.type,
+          key: entity.key,
+          data: entity.data,
+          source: "user_message",
+        },
+      );
+      ctx = {
+        contextId: saved.contextId,
+        type: entity.type,
+        key: entity.key,
+        data: entity.data,
+        createdAt: now(),
+      };
+      state.activeContext = ctx;
+    }
+  }
+
+  if (!ctx) {
     return {
       reply:
-        "I can send a message, but I need to know what it's about first. Could you tell me what you'd like to share?",
+        "I can send a message, but I need to know what it's about first. " +
+        "Could you tell me what you'd like to share?",
       conversationId: state.conversationId,
       context: null,
       actions: [],
@@ -382,18 +494,66 @@ async function handleDraftMessage(
     };
   }
 
-  const recipient = extractRecipient(message);
+  // ── Step 2: extract and resolve the recipient ───────────
+  const recipientRef = extractRecipient(message);
+  if (!recipientRef) {
+    return {
+      reply: "Happy to send that. Who would you like me to send it to?",
+      conversationId: state.conversationId,
+      context: ctx,
+      actions: [],
+      pendingConfirmation: null,
+    };
+  }
+
+  const resolved = await callTool<ResolveContactResult>("resolve_contact", {
+    userId: state.userId,
+    reference: recipientRef,
+  });
+
+  if (!resolved.found) {
+    // No exact match. If there are suggestions, offer them.
+    if (resolved.suggestions.length > 0) {
+      const names = resolved.suggestions
+        .map((s) => `${s.displayName} (${s.relationship})`)
+        .join(", ");
+      return {
+        reply:
+          `I don't have a contact for "${recipientRef}". ` +
+          `You have: ${names}. Which one did you mean?`,
+        conversationId: state.conversationId,
+        context: ctx,
+        actions: [],
+        pendingConfirmation: null,
+      };
+    }
+
+    // No contacts at all.
+    return {
+      reply:
+        `I don't have a contact for "${recipientRef}". ` +
+        `Your contact list is empty right now.`,
+      conversationId: state.conversationId,
+      context: ctx,
+      actions: [],
+      pendingConfirmation: null,
+    };
+  }
+
+  const contact = resolved.contact!;
+
+  // ── Step 3: create the draft ────────────────────────────
   const body = composeMessageFromContext(ctx);
 
   const draft = await callTool<{
     draftId: string;
-    recipient: string;
+    recipient: ContactMatch;
     message: string;
     requiresConfirmation: true;
     confirmationToken: string;
   }>("draft_family_message", {
     userId: state.userId,
-    recipient,
+    contactId: contact.contactId,
     content: body,
     relatedContextId: ctx.contextId,
   });
@@ -408,19 +568,80 @@ async function handleDraftMessage(
   state.pendingConfirmation = pending;
 
   return {
-    reply: `I can send your ${recipient} a message saying: "${draft.message}" Should I send it?`,
+    reply:
+      `I can send ${contact.displayName} a ${contact.channel} message saying: ` +
+      `"${draft.message}" Should I send it?`,
     conversationId: state.conversationId,
     context: ctx,
     actions: [
       {
         type: "message_drafted",
-        summary: `Draft prepared for ${recipient}`,
+        summary: `Draft prepared for ${contact.displayName}`,
         at: now(),
       },
     ],
     pendingConfirmation: pending,
   };
 }
+
+// async function handleConfirmSend(
+//   state: ConversationState,
+//   userMessage: string,
+// ): Promise<AgentOutput> {
+//   const pending = state.pendingConfirmation;
+//   if (!pending) {
+//     return {
+//       reply: "There's nothing waiting to be sent right now.",
+//       conversationId: state.conversationId,
+//       context: state.activeContext,
+//       actions: [],
+//       pendingConfirmation: null,
+//     };
+//   }
+
+//   const result = await callTool<{
+//     sent: boolean;
+//     draftId: string;
+//     sentAt?: string;
+//     rejectionReason?: string;
+//   }>("send_family_message", {
+//     userId: state.userId,
+//     draftId: pending.draftId,
+//     confirmationToken: pending.confirmationToken,
+//     userConfirmation: userMessage,
+//   });
+
+//   if (!result.sent) {
+//     logger.warn("Send rejected by MCP server", {
+//       draftId: pending.draftId,
+//       reason: result.rejectionReason,
+//     });
+//     return {
+//       reply:
+//         "I wasn't able to send that message. Could we try preparing it again?",
+//       conversationId: state.conversationId,
+//       context: state.activeContext,
+//       actions: [],
+//       pendingConfirmation: pending,
+//     };
+//   }
+
+//   state.pendingConfirmation = null;
+
+//   return {
+//     reply: `Done. The message to your ${pending.recipient} is ready to send.`,
+//     conversationId: state.conversationId,
+//     context: state.activeContext,
+//     actions: [
+//       {
+//         type: "message_sent",
+//         summary: `Message sent to ${pending.recipient}`,
+//         at: now(),
+//       },
+//     ],
+//     pendingConfirmation: null,
+//   };
+// }
 
 async function handleConfirmSend(
   state: ConversationState,
@@ -467,13 +688,15 @@ async function handleConfirmSend(
   state.pendingConfirmation = null;
 
   return {
-    reply: `Sent. Your ${pending.recipient} has the message.`,
+    reply:
+      `Done. Marked as sent to ${pending.recipient.displayName} ` +
+      `over ${pending.recipient.channel}.`,
     conversationId: state.conversationId,
     context: state.activeContext,
     actions: [
       {
         type: "message_sent",
-        summary: `Message sent to ${pending.recipient}`,
+        summary: `Message sent to ${pending.recipient.displayName}`,
         at: now(),
       },
     ],
@@ -481,21 +704,43 @@ async function handleConfirmSend(
   };
 }
 
+// function handleDenySend(state: ConversationState): AgentOutput {
+//   const pending = state.pendingConfirmation;
+//   state.pendingConfirmation = null;
+
+//   return {
+//     reply: pending
+//       ? `No problem. I won't send anything to your ${pending.recipient}.`
+//       : "Okay, nothing sent.",
+//     conversationId: state.conversationId,
+//     context: state.activeContext,
+//     actions: pending
+//       ? [
+//           {
+//             type: "message_cancelled",
+//             summary: `Cancelled message to ${pending.recipient}`,
+//             at: now(),
+//           },
+//         ]
+//       : [],
+//     pendingConfirmation: null,
+//   };
+// }
+
 function handleDenySend(state: ConversationState): AgentOutput {
   const pending = state.pendingConfirmation;
   state.pendingConfirmation = null;
-
   return {
     reply: pending
-      ? `No problem. I won't send anything to your ${pending.recipient}.`
-      : "Okay, nothing sent.",
+      ? `No problem. I won't send anything to ${pending.recipient.displayName}.`
+      : 'Okay, nothing sent.',
     conversationId: state.conversationId,
     context: state.activeContext,
     actions: pending
       ? [
           {
-            type: "message_cancelled",
-            summary: `Cancelled message to ${pending.recipient}`,
+            type: 'message_cancelled',
+            summary: `Cancelled message to ${pending.recipient.displayName}`,
             at: now(),
           },
         ]

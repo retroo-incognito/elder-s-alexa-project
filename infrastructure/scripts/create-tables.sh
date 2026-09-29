@@ -98,3 +98,25 @@ echo "✓ TTL enabled on independence-conversations"
 
 echo ""
 echo "All tables ready in $REGION."
+
+
+# ── Contacts (with RelationshipIndex GSI) ─────────────────────
+create_table independence-contacts \
+  --attribute-definitions \
+      AttributeName=userId,AttributeType=S \
+      AttributeName=contactId,AttributeType=S \
+      AttributeName=relationship,AttributeType=S \
+  --key-schema \
+      AttributeName=userId,KeyType=HASH \
+      AttributeName=contactId,KeyType=RANGE \
+  --global-secondary-indexes '[
+    {
+      "IndexName": "RelationshipIndex",
+      "KeySchema": [
+        {"AttributeName": "userId", "KeyType": "HASH"},
+        {"AttributeName": "relationship", "KeyType": "RANGE"}
+      ],
+      "Projection": {"ProjectionType": "ALL"}
+    }
+  ]' \
+  --billing-mode PAY_PER_REQUEST

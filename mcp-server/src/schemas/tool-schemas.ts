@@ -156,21 +156,27 @@ export const GetRemindersOutput = z.object({
 
 export const DraftFamilyMessageInput = z.object({
   userId: z.string(),
-  recipient: z.string().describe('Relationship or name, e.g. "daughter"'),
-  content: z.string().min(1).describe("The proposed message body"),
+  contactId: z
+    .string()
+    .describe('The contactId returned by resolve_contact.'),
+  content: z.string().min(1).describe('The proposed message body'),
   relatedContextId: z.string().optional(),
 });
 
 export const DraftFamilyMessageOutput = z.object({
   draftId: z.string(),
-  recipient: z.string(),
+  recipient: z
+    .object({
+      contactId: z.string(),
+      relationship: z.string(),
+      displayName: z.string(),
+      channel: z.string(),
+      address: z.string(),
+    })
+    .describe('The resolved contact this draft is addressed to.'),
   message: z.string(),
   requiresConfirmation: z.literal(true),
-  confirmationToken: z
-    .string()
-    .describe(
-      "Opaque token. Must be passed back to send_family_message after the user confirms.",
-    ),
+  confirmationToken: z.string(),
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -195,4 +201,44 @@ export const SendFamilyMessageOutput = z.object({
   draftId: z.string(),
   sentAt: z.string().optional(),
   rejectionReason: z.string().optional(),
+});
+
+// ─────────────────────────────────────────────────────────────
+// Tool 6a — resolve_contact
+// ─────────────────────────────────────────────────────────────
+
+export const ResolveContactInput = z.object({
+  userId: z.string(),
+  reference: z
+    .string()
+    .min(1)
+    .describe(
+      'A relationship word ("sister", "daughter") or a name fragment ("Priya") ' +
+        'that the user used to refer to someone.',
+    ),
+});
+
+export const ResolveContactOutput = z.object({
+  found: z.boolean(),
+  contact: z
+    .object({
+      contactId: z.string(),
+      relationship: z.string(),
+      displayName: z.string(),
+      channel: z.string(),
+      address: z.string(),
+    })
+    .optional(),
+  suggestions: z
+    .array(
+      z.object({
+        contactId: z.string(),
+        relationship: z.string(),
+        displayName: z.string(),
+        channel: z.string(),
+      }),
+    )
+    .describe(
+      'When no exact match, other contacts the user might have meant.',
+    ),
 });
