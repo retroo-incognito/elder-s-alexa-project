@@ -50,6 +50,7 @@ function getOrCreateState(
     activeContext: null,
     pendingConfirmation: null,
     pendingReminderMessage: null,
+    pendingContactClarification: null,
     createdAt: now(),
     updatedAt: now(),
   };
@@ -446,7 +447,53 @@ async function handleDraftMessage(
   message: string,
   plan: Plan,
 ): Promise<AgentOutput> {
-  // ── Step 1: resolve the context ─────────────────────────
+  // ── Case 1: we are waiting for the user to pick a contact ──
+  if (state.pendingContactClarification) {
+    if (/^(never mind|cancel|forget it|no thanks)\b/i.test(message.trim())) {
+      state.pendingContactClarification = null;
+      return {
+        reply: "No problem. Nothing sent.",
+        conversationId: state.conversationId,
+        context: state.activeContext,
+        actions: [],
+        pendingConfirmation: null,
+      };
+    }
+    const { suggestions, relatedContextId } = state.pendingContactClarification;
+    const picked = matchContactByMessage(message, suggestions);
+
+    if (!picked) {
+      const names = suggestions
+        .map((s) => `${s.displayName} (${s.relationship})`)
+        .join(", ");
+      return {
+        reply: `I didn't catch that. Your contacts are: ${names}. Which one?`,
+        conversationId: state.conversationId,
+        context: state.activeContext,
+        actions: [],
+        pendingConfirmation: null,
+      };
+    }
+
+    // Clear the clarification and continue drafting.
+    state.pendingContactClarification = null;
+
+    const ctx = await resolveContext(state.userId, null, state.activeContext);
+    if (!ctx || ctx.contextId !== relatedContextId) {
+      return {
+        reply:
+          "Sorry, I lost track of what we were sending. Could you start again?",
+        conversationId: state.conversationId,
+        context: state.activeContext,
+        actions: [],
+        pendingConfirmation: null,
+      };
+    }
+
+    return draftToContact(state, ctx, picked);
+  }
+
+  // ── Case 2: normal start of a draft request ──
   let ctx = await resolveContext(
     state.userId,
     plan.extractedReference,
@@ -458,7 +505,6 @@ async function handleDraftMessage(
       "analyze_message",
       { content: message, source: "user_message" },
     );
-
     if (directAnalysis.entities.length > 0) {
       const entity = directAnalysis.entities[0];
       const saved = await callTool<{ contextId: string; saved: boolean }>(
@@ -494,7 +540,6 @@ async function handleDraftMessage(
     };
   }
 
-  // ── Step 2: extract and resolve the recipient ───────────
   const recipientRef = extractRecipient(message);
   if (!recipientRef) {
     return {
@@ -512,8 +557,15 @@ async function handleDraftMessage(
   });
 
   if (!resolved.found) {
-    // No exact match. If there are suggestions, offer them.
     if (resolved.suggestions.length > 0) {
+      // Save the clarification state so the next message can resolve it.
+      state.pendingContactClarification = {
+        suggestions: resolved.suggestions,
+        relatedContextId: ctx.contextId,
+        originalRecipientRef: recipientRef,
+        createdAt: now(),
+      };
+
       const names = resolved.suggestions
         .map((s) => `${s.displayName} (${s.relationship})`)
         .join(", ");
@@ -528,7 +580,6 @@ async function handleDraftMessage(
       };
     }
 
-    // No contacts at all.
     return {
       reply:
         `I don't have a contact for "${recipientRef}". ` +
@@ -540,48 +591,7 @@ async function handleDraftMessage(
     };
   }
 
-  const contact = resolved.contact!;
-
-  // ── Step 3: create the draft ────────────────────────────
-  const body = composeMessageFromContext(ctx);
-
-  const draft = await callTool<{
-    draftId: string;
-    recipient: ContactMatch;
-    message: string;
-    requiresConfirmation: true;
-    confirmationToken: string;
-  }>("draft_family_message", {
-    userId: state.userId,
-    contactId: contact.contactId,
-    content: body,
-    relatedContextId: ctx.contextId,
-  });
-
-  const pending: PendingConfirmation = {
-    draftId: draft.draftId,
-    confirmationToken: draft.confirmationToken,
-    recipient: draft.recipient,
-    message: draft.message,
-    createdAt: now(),
-  };
-  state.pendingConfirmation = pending;
-
-  return {
-    reply:
-      `I can send ${contact.displayName} a ${contact.channel} message saying: ` +
-      `"${draft.message}" Should I send it?`,
-    conversationId: state.conversationId,
-    context: ctx,
-    actions: [
-      {
-        type: "message_drafted",
-        summary: `Draft prepared for ${contact.displayName}`,
-        at: now(),
-      },
-    ],
-    pendingConfirmation: pending,
-  };
+  return draftToContact(state, ctx, resolved.contact!);
 }
 
 // async function handleConfirmSend(
@@ -733,13 +743,13 @@ function handleDenySend(state: ConversationState): AgentOutput {
   return {
     reply: pending
       ? `No problem. I won't send anything to ${pending.recipient.displayName}.`
-      : 'Okay, nothing sent.',
+      : "Okay, nothing sent.",
     conversationId: state.conversationId,
     context: state.activeContext,
     actions: pending
       ? [
           {
-            type: 'message_cancelled',
+            type: "message_cancelled",
             summary: `Cancelled message to ${pending.recipient.displayName}`,
             at: now(),
           },
@@ -1150,4 +1160,100 @@ function composeMessageFromContext(ctx: ContextMatch): string {
   }
 
   return `I wanted to let you know about ${ctx.key}.`;
+}
+
+/**
+ * Matches the user's reply against the stored suggestions.
+ * Tries relationship first ("sister"), then display name prefix ("Priya"),
+ * then full name substring ("priya sharma").
+ */
+function matchContactByMessage(
+  message: string,
+  suggestions: ContactSuggestion[],
+): ContactMatch | null {
+  const needle = message
+    .toLowerCase()
+    .trim()
+    .replace(/[.!?,]+$/, "");
+  if (!needle) return null;
+
+  // Exact relationship match
+  const byRel = suggestions.find(
+    (s) => s.relationship.toLowerCase() === needle,
+  );
+  if (byRel) return { ...byRel, address: "" };
+
+  // Display name prefix match
+  const byName = suggestions.find((s) => {
+    const first = s.displayName.toLowerCase().split(" ")[0];
+    return first === needle || s.displayName.toLowerCase().startsWith(needle);
+  });
+  if (byName) return { ...byName, address: "" };
+
+  // Substring match anywhere
+  const bySubstring = suggestions.find((s) =>
+    s.displayName.toLowerCase().includes(needle),
+  );
+  if (bySubstring) return { ...bySubstring, address: "" };
+
+  return null;
+}
+
+/**
+ * Creates the draft to a resolved contact and returns the agent output.
+ * Shared by the direct resolution path and the clarification-resolution path.
+ */
+async function draftToContact(
+  state: ConversationState,
+  ctx: ContextMatch,
+  contact: ContactMatch,
+): Promise<AgentOutput> {
+  // Re-fetch the full contact to get the address (suggestions don't include it).
+  const resolved = await callTool<ResolveContactResult>("resolve_contact", {
+    userId: state.userId,
+    reference: contact.relationship,
+  });
+
+  const fullContact =
+    resolved.found && resolved.contact ? resolved.contact : contact;
+
+  const body = composeMessageFromContext(ctx);
+
+  const draft = await callTool<{
+    draftId: string;
+    recipient: ContactMatch;
+    message: string;
+    requiresConfirmation: true;
+    confirmationToken: string;
+  }>("draft_family_message", {
+    userId: state.userId,
+    contactId: fullContact.contactId,
+    content: body,
+    relatedContextId: ctx.contextId,
+  });
+
+  const pending: PendingConfirmation = {
+    draftId: draft.draftId,
+    confirmationToken: draft.confirmationToken,
+    recipient: draft.recipient,
+    message: draft.message,
+    createdAt: now(),
+  };
+  state.pendingConfirmation = pending;
+
+  return {
+    reply:
+      `I can send ${fullContact.displayName} a ${fullContact.channel} message saying: ` +
+      `"${draft.message}" Should I send it?`,
+    conversationId: state.conversationId,
+    context: ctx,
+    actions: [
+      {
+        type: "message_drafted",
+        summary: `Draft prepared for ${fullContact.displayName}`,
+        at: now(),
+      },
+    ],
+    pendingConfirmation: pending,
+  };
 }

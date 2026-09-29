@@ -28,6 +28,15 @@ export async function plan(
     }
   }
 
+  if (state.pendingContactClarification) {
+    return {
+      intent: "DRAFT_MESSAGE",
+      reasoning:
+        "Contact clarification is pending. The user is naming a contact.",
+      extractedReference: null,
+    };
+  }
+
   const stateContext = state.activeContext
     ? JSON.stringify({
         type: state.activeContext.type,

@@ -33,6 +33,7 @@ export interface ConversationState {
   activeContext: ContextMatch | null;
   pendingConfirmation: PendingConfirmation | null;
   pendingReminderMessage: string | null;  
+  pendingContactClarification: PendingContactClarification | null;  // ← add
   createdAt: string;
   updatedAt: string;
 }
@@ -92,4 +93,11 @@ export interface ContactSuggestion {
   relationship: string;
   displayName: string;
   channel: string;
+}
+
+export interface PendingContactClarification {
+  suggestions: ContactSuggestion[];
+  relatedContextId: string;
+  originalRecipientRef: string;
+  createdAt: string;
 }
