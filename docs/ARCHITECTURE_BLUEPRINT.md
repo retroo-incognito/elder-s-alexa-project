@@ -178,8 +178,13 @@ The overall system architecture is organized into three decoupled tiers: Client 
  │  │ VoiceInput.tsx          │ │ App.tsx (Workspace Shell) │ │ ConfirmationPrompt.tsx         │ │
  │  │ Web Speech Recognition  │ │ 3-Panel State Management  │ │ Amber Blocking Modal           │ │
  │  │ Interim Transcript Flow │ │ (Chat, Context, Actions)  │ │ (role="alertdialog")           │ │
- │  └────────────┬────────────┘ └─────────────┬─────────────┘ └────────────────┬───────────────┘ │
- └───────────────┼────────────────────────────┼────────────────────────────────┼─────────────────┘
+ │  └─────────────────────────┘ └─────────────┬─────────────┘ └────────────────────────────────┘ │
+ │  ┌─────────────────────────┐               │               ┌────────────────────────────────┐ │
+ │  │ Conversation.tsx        │               │               │ audio.ts (Audio Engine)        │ │
+ │  │ Typing indicators &     │               │               │ Web Audio API Thinking Chime   │ │
+ │  │ Latency Phase Badges    │               │               │ SpeechSynthesis Voice Feedback │ │
+ │  └─────────────────────────┘               │               └────────────────────────────────┘ │
+ └────────────────────────────────────────────┼──────────────────────────────────────────────────┘
                  │                            │                                │
                  │ JSON HTTP POST /api/chat   │ JSON HTTP POST /api/chat       │
                  ▼                            ▼                                ▼
@@ -1210,6 +1215,17 @@ Provides hands-free voice interaction utilizing `window.SpeechRecognition` or `w
 
 ---
 
+### 4. Audio Feedback & Perceptual Latency Masking Engine ([`audio.ts`](file:///H:/htdocs/meeting2action-alexa-agent/elder-s-alexa-project/apps/web/src/lib/audio.ts))
+Because multi-step LLM extraction and DynamoDB persistence require 1.0–1.8 seconds per turn, the web interface implements an ambient acoustic and visual latency masking system:
+- **Phase State Machine:** `ProcessingPhase` tracks conversational progression through `'idle'` → `'submitted'` → `'masking'`.
+- **Latency Threshold Gate (`MASK_THRESHOLD_MS = 600`):** If the backend does not return within 600ms, the frontend automatically initiates dual-channel feedback to reassure the user:
+  1. **Web Audio API Thinking Chime (`playThinkingChime()`):** A soft, synthesized two-tone sine chime (720Hz ramping to 540Hz over 180ms with exponential gain envelope) generated dynamically without external media asset dependencies.
+  2. **Conversational Voice Acknowledgement (`speak("One moment.")`):** Initiated 150ms after the chime via `SpeechSynthesisUtterance`, providing immediate ambient confirmation that the agent is actively processing the request.
+  3. **Visual Typing State ([`Conversation.tsx`](file:///H:/htdocs/meeting2action-alexa-agent/elder-s-alexa-project/apps/web/src/components/Conversation.tsx)):** Renders animated triple dots accompanied by an italicized `working…` label during the masking phase.
+- **Immediate Cancellation:** The instant the agent HTTP response arrives, `stopSpeaking()` immediately cancels any active speech synthesis and clears the masking timer, ensuring zero conversational delay.
+
+---
+
 ## 10. What's Real vs. Simulated
 
 | Component | Status | Implementation Notes |
@@ -1249,8 +1265,8 @@ Provides hands-free voice interaction utilizing `window.SpeechRecognition` or `w
 
 ## 12. Known Limitations
 
-1. **Extraction Latency:**  
-   Two sequential LLM calls (Planner intent classification + Response natural language generation) introduce approximately 1.0–1.8 seconds of end-to-end turn latency.
+1. **Extraction Latency & Perceptual Mitigation:**  
+   Two sequential LLM calls (Planner intent classification + Response natural language generation) introduce approximately 1.0–1.8 seconds of end-to-end turn latency. The web client mitigates user friction using an acoustic Web Audio API chime and speech synthesis acknowledgement triggered when processing exceeds 600ms (`MASK_THRESHOLD_MS`).
 2. **Volatile In-Memory Dialog State:**  
    Active turn buffers and pending confirmation tokens reside in Node.js process memory; an ungraceful container restart during a pending confirmation requires the user to repeat their request.
 3. **Simulated Outbound Telephony:**  
