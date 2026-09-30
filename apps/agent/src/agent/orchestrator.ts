@@ -1164,37 +1164,109 @@ function composeMessageFromContext(ctx: ContextMatch): string {
 
 /**
  * Matches the user's reply against the stored suggestions.
- * Tries relationship first ("sister"), then display name prefix ("Priya"),
- * then full name substring ("priya sharma").
+ * Handles natural phrasing like "send this to my sister" or "to Priya"
+ * by extracting the meaningful words and ignoring framing.
  */
 function matchContactByMessage(
   message: string,
   suggestions: ContactSuggestion[],
 ): ContactMatch | null {
-  const needle = message
+  const lower = message
     .toLowerCase()
     .trim()
     .replace(/[.!?,]+$/, "");
-  if (!needle) return null;
+  if (!lower) return null;
 
-  // Exact relationship match
-  const byRel = suggestions.find(
-    (s) => s.relationship.toLowerCase() === needle,
+  // Drop framing words. What remains is the actual reference.
+  const STOP_WORDS = new Set([
+    "send",
+    "this",
+    "that",
+    "to",
+    "the",
+    "a",
+    "an",
+    "my",
+    "our",
+    "for",
+    "message",
+    "text",
+    "note",
+    "it",
+    "about",
+    "share",
+    "forward",
+    "with",
+    "yes",
+    "ok",
+    "okay",
+    "please",
+    "now",
+    "and",
+    "or",
+    "her",
+    "him",
+  ]);
+
+  const words = lower
+    .split(/\s+/)
+    .filter((w) => w.length > 0 && !STOP_WORDS.has(w));
+
+  if (words.length === 0) return null;
+
+  // 1. Any word matches a relationship exactly.
+  //    "send to my sister" → words = ["sister"] → match.
+  for (const word of words) {
+    const byRel = suggestions.find(
+      (s) => s.relationship.toLowerCase() === word,
+    );
+    if (byRel) return { ...byRel, address: "" };
+  }
+
+  // 2. Any word matches the first name of a display name.
+  //    "send to Priya" → words = ["priya"] → "Priya Sharma" prefix match.
+  for (const word of words) {
+    const byName = suggestions.find((s) => {
+      const firstName = s.displayName.toLowerCase().split(" ")[0];
+      return firstName === word;
+    });
+    if (byName) return { ...byName, address: "" };
+  }
+
+   // 3. Any word is a prefix of any part of a display name.
+  //    Handles partial names and slight misspellings.
+  for (const word of words) {
+    if (word.length < 3) continue;
+    const byPartial = suggestions.find((s) =>
+      s.displayName
+        .toLowerCase()
+        .split(" ")
+        .some((part) => part.startsWith(word)),
+    );
+    if (byPartial) return { ...byPartial, address: "" };
+  }
+
+  // 4. Full message substring match against display name.
+  //    "Priya Sharma" → matches "Priya Sharma".
+  const byFull = suggestions.find((s) =>
+    s.displayName.toLowerCase().includes(lower),
   );
-  if (byRel) return { ...byRel, address: "" };
+  if (byFull) return { ...byFull, address: '' };
 
   // Display name prefix match
-  const byName = suggestions.find((s) => {
-    const first = s.displayName.toLowerCase().split(" ")[0];
-    return first === needle || s.displayName.toLowerCase().startsWith(needle);
-  });
-  if (byName) return { ...byName, address: "" };
+  // const byName = suggestions.find((s) => {
+  //   const first = s.displayName.toLowerCase().split(" ")[0];
+  //   return (
+  //     first === words[0] || s.displayName.toLowerCase().startsWith(words[0])
+  //   );
+  // });
+  // if (byName) return { ...byName, address: "" };
 
-  // Substring match anywhere
-  const bySubstring = suggestions.find((s) =>
-    s.displayName.toLowerCase().includes(needle),
-  );
-  if (bySubstring) return { ...bySubstring, address: "" };
+  // // Substring match anywhere
+  // const bySubstring = suggestions.find((s) =>
+  //   s.displayName.toLowerCase().includes(words[0]),
+  // );
+  // if (bySubstring) return { ...bySubstring, address: "" };
 
   return null;
 }
