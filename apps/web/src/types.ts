@@ -20,14 +20,6 @@ export interface AgentAction {
   at: string;
 }
 
-export interface PendingConfirmation {
-  draftId: string;
-  confirmationToken: string;
-  recipient: string;
-  message: string;
-  createdAt: string;
-}
-
 export interface AgentResponse {
   reply: string;
   conversationId: string;

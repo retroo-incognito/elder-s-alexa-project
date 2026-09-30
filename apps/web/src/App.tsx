@@ -8,6 +8,8 @@ import { VoiceInput } from "./components/VoiceInput";
 import type { AgentAction, ContextMatch, PendingConfirmation, Turn } from "./types";
 
 const SESSION_KEY = "independence-agent.conversationId";
+const CHATS_KEY = "independence-agent.chats";
+type Chat = { id: string; title: string; updatedAt: string; turns: Turn[] };
 type View = "home" | "tasks" | "activity" | "tools" | "history";
 const NAV: { id: View; label: string; index: string }[] = [
   { id: "home", label: "Home", index: "01" },
@@ -25,10 +27,18 @@ function loadConversationId(): string {
   sessionStorage.setItem(SESSION_KEY, fresh);
   return fresh;
 }
+function loadChats(currentId: string): Chat[] {
+  try {
+    const stored = JSON.parse(localStorage.getItem(CHATS_KEY) ?? "[]") as Chat[];
+    if (Array.isArray(stored)) return stored.some((chat) => chat.id === currentId) ? stored : [{ id: currentId, title: "New conversation", updatedAt: new Date().toISOString(), turns: [] }, ...stored];
+  } catch { /* Start with a clean local history if storage is invalid. */ }
+  return [{ id: currentId, title: "New conversation", updatedAt: new Date().toISOString(), turns: [] }];
+}
 
 export default function App() {
   const [conversationId, setConversationId] = useState(loadConversationId);
-  const [turns, setTurns] = useState<Turn[]>([]);
+  const [chats, setChats] = useState<Chat[]>(() => loadChats(loadConversationId()));
+  const [turns, setTurns] = useState<Turn[]>(() => chats.find((chat) => chat.id === loadConversationId())?.turns ?? []);
   const [context, setContext] = useState<ContextMatch | null>(null);
   const [actions, setActions] = useState<AgentAction[]>([]);
   const [interim, setInterim] = useState("");
@@ -37,6 +47,21 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState<View>("home");
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const turnsRef = useRef(turns);
+
+  useEffect(() => { localStorage.setItem(CHATS_KEY, JSON.stringify(chats)); }, [chats]);
+
+  function saveTurn(chatId: string, turn: Turn, firstMessage = false): void {
+    const next = [...turnsRef.current, turn];
+    turnsRef.current = next;
+    setTurns(next);
+    setChats((existing) => {
+      const chat = existing.find((item) => item.id === chatId);
+      const title = firstMessage && chat?.title === "New conversation" ? turn.text.slice(0, 42) : chat?.title ?? "New conversation";
+      const updated = { id: chatId, title, updatedAt: turn.at, turns: next };
+      return [updated, ...existing.filter((item) => item.id !== chatId)];
+    });
+  }
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
@@ -47,10 +72,10 @@ export default function App() {
     setInput("");
     setView("tasks");
     const userTurn: Turn = { id: newId(), role: "user", text: trimmed, at: new Date().toISOString() };
-    setTurns((prev) => [...prev, userTurn]);
+    saveTurn(conversationId, userTurn, true);
     try {
       const res = await sendMessage(conversationId, trimmed);
-      setTurns((prev) => [...prev, { id: newId(), role: "agent", text: res.reply, at: new Date().toISOString() }]);
+      saveTurn(conversationId, { id: newId(), role: "agent", text: res.reply, at: new Date().toISOString() });
       setContext(res.context);
       setActions((prev) => [...prev, ...res.actions]);
       setPending(res.pendingConfirmation);
@@ -59,7 +84,7 @@ export default function App() {
         sessionStorage.setItem(SESSION_KEY, res.conversationId);
       }
     } catch (err) {
-      setTurns((prev) => [...prev, { id: newId(), role: "agent", text: (err as Error).message, at: new Date().toISOString(), error: true }]);
+      saveTurn(conversationId, { id: newId(), role: "agent", text: (err as Error).message, at: new Date().toISOString(), error: true });
       setInput(trimmed);
     } finally { setBusy(false); }
   }
@@ -71,8 +96,12 @@ export default function App() {
   function reset(): void {
     const fresh = newId();
     sessionStorage.setItem(SESSION_KEY, fresh);
-    setConversationId(fresh); setTurns([]); setContext(null); setActions([]); setPending(null); setInput(""); setView("home");
+    setConversationId(fresh); turnsRef.current = []; setTurns([]); setChats((prev) => [{ id: fresh, title: "New conversation", updatedAt: new Date().toISOString(), turns: [] }, ...prev]); setContext(null); setActions([]); setPending(null); setInput(""); setView("home");
     inputRef.current?.focus();
+  }
+
+  function openChat(chat: Chat): void {
+    setConversationId(chat.id); sessionStorage.setItem(SESSION_KEY, chat.id); turnsRef.current = chat.turns; setTurns(chat.turns); setContext(null); setActions([]); setPending(null); setInput(""); setView("history");
   }
 
   const systemState = busy ? "PROCESSING" : turns.length ? (pending ? "AWAITING APPROVAL" : "READY FOR NEXT TASK") : "READY";
@@ -97,6 +126,7 @@ export default function App() {
               <span className="nav-index">{item.index}</span><span>{item.label}</span><span className="nav-indicator" />
             </button>)}
           </nav>
+          <div className="recent-chats"><div className="sidebar-label eyebrow">RECENT CHATS</div>{chats.map((chat) => <button key={chat.id} type="button" className={`recent-chat${conversationId === chat.id ? " is-current" : ""}`} onClick={() => openChat(chat)} title={chat.title}><span>{chat.title}</span><time>{new Date(chat.updatedAt).toLocaleDateString()}</time></button>)}</div>
           <div className="sidebar-bottom"><span className="sidebar-spark">✳</span><p>Small steps.<br /><strong>More independence.</strong></p><span className="version-tag">PREVIEW 01</span></div>
         </aside>
 
@@ -123,7 +153,7 @@ export default function App() {
           </section>
 
           <section className="output-section" aria-live="polite">
-            <div className="section-heading output-heading"><div><span className="eyebrow">02 / LIVE WORKSPACE</span><h2>{view === "home" ? "What’s happening" : title}</h2></div><span className={`state-label${busy ? " state-label--busy" : turns.length ? " state-label--done" : ""}`}><span />{busy ? "UNDERSTANDING REQUEST" : turns.length ? "TASK UPDATED" : "SYSTEM READY"}</span></div>
+            <div className="section-heading output-heading"><div><span className="eyebrow">02 / LIVE WORKSPACE</span><h2>{view === "home" ? "What’s happening" : view === "tasks" || view === "history" ? "Conversation" : title}</h2></div><span className={`state-label${busy ? " state-label--busy" : turns.length ? " state-label--done" : ""}`}><span />{busy ? "UNDERSTANDING REQUEST" : turns.length ? "TASK UPDATED" : "SYSTEM READY"}</span></div>
             <div className="workspace-content">
               {(view === "home" || view === "tasks" || view === "history") && <div className="content-column"><div className="content-subhead"><span className="eyebrow">{turns.length ? `${String(turns.length).padStart(2, "0")} EVENTS` : "TASK TIMELINE"}</span><span className="subhead-rule" /></div><Conversation turns={turns} busy={busy} />{pending && <ConfirmationPrompt pending={pending} onConfirm={() => void submit("Yes.")} onDeny={() => void submit("No.")} disabled={busy} />}</div>}
               {(view === "home" || view === "tools") && <div className="detail-column"><div className="content-subhead"><span className="eyebrow">MEMORY / CONTEXT</span><span className="context-signal">●</span></div><ContextPanel context={context} /></div>}

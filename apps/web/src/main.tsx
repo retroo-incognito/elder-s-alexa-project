@@ -4,6 +4,8 @@ import App from './App';
 // CSS is resolved and injected by the bundler; TypeScript does not type-check stylesheet imports.
 // @ts-ignore
 import './index.css';
+// @ts-ignore
+import './redesign.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
