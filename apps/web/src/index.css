@@ -1670,3 +1670,11 @@ body { background: var(--bg); }
     display: none;
   }
 }
+
+
+.turn__typing-note {
+  font-size: 12px;
+  color: var(--ink-faint);
+  margin-left: 8px;
+  font-style: italic;
+}

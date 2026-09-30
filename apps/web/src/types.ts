@@ -1,3 +1,5 @@
+export type ProcessingPhase = 'idle' | 'submitted' | 'masking';
+
 export interface ContextMatch {
   contextId: string;
   type: string;
