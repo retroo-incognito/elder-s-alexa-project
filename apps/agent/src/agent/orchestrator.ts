@@ -455,14 +455,14 @@ async function handleUnderstand(
       new Set(threat.signals.map((s) => s.category.replace(/-/g, " "))),
     ).join(", ");
 
-    // Sanitize the content so it's safe to forward without importing code from
-    // another package in this monorepo, which would trip rootDir/TS import rules.
-    const sanitizeForForwarding = (content: string) =>
-      content
-        .replace(/https?:\/\/\S+/gi, "[link removed]")
-        .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[email removed]")
-        .replace(/\b\d{10,}\b/g, "[phone removed]")
-        .slice(0, 280);
+    // Sanitize the content so it's safe to forward.
+    const { sanitizeForForwarding } =
+      await import("../../../../mcp-server/src/lib/threat-scan.js").catch(
+        () => ({
+          sanitizeForForwarding: (c: string) =>
+            c.replace(/https?:\/\/\S+/gi, "[link removed]").slice(0, 280),
+        }),
+      );
 
     const sanitized = sanitizeForForwarding(userMessage);
 
