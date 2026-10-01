@@ -16,6 +16,7 @@ import type {
   ContextMatch,
   ConversationState,
   PendingConfirmation,
+  PendingQuarantineEscalation,
   Plan,
 } from "../models/schemas.js";
 
@@ -51,11 +52,180 @@ function getOrCreateState(
     pendingConfirmation: null,
     pendingReminderMessage: null,
     pendingContactClarification: null,
+    pendingQuarantineEscalation: null,
     createdAt: now(),
     updatedAt: now(),
   };
   conversations.set(conversationId, created);
   return created;
+}
+
+async function handleQuarantineResponse(
+  state: ConversationState,
+  message: string,
+): Promise<AgentOutput> {
+  const pending = state.pendingQuarantineEscalation;
+  if (!pending) {
+    return {
+      reply: "Sorry, I lost track. Could you start again?",
+      conversationId: state.conversationId,
+      context: state.activeContext,
+      actions: [],
+      pendingConfirmation: null,
+    };
+  }
+
+   // If we're inside a contact clarification, resolve it first.
+  if (state.pendingContactClarification) {
+    const picked = matchContactByMessage(
+      message,
+      state.pendingContactClarification.suggestions,
+    );
+    if (picked) {
+      state.pendingContactClarification = null;
+      // Re-resolve to get the full record.
+      const full = await callTool<ResolveContactResult>('resolve_contact', {
+        userId: state.userId,
+        reference: picked.relationship,
+      });
+      return draftQuarantineSummary(
+        state,
+        full.contact ?? { ...picked, address: '' },
+        pending,
+      );
+    }
+    // Still no match, re-ask.
+    const names = state.pendingContactClarification.suggestions
+      .map((s) => `${s.displayName} (${s.relationship})`)
+      .join(', ');
+    return {
+      reply: `I didn't catch that. Your contacts are: ${names}. Which one?`,
+      conversationId: state.conversationId,
+      context: state.activeContext,
+      actions: [],
+      pendingConfirmation: null,
+    };
+  }
+
+  // Negative → clear and move on.
+  if (/^(no|nope|don'?t|not now|never mind|cancel)\b/i.test(message.trim())) {
+    state.pendingQuarantineEscalation = null;
+    return {
+      reply: "No problem. I won't send anything about it.",
+      conversationId: state.conversationId,
+      context: state.activeContext,
+      actions: [],
+      pendingConfirmation: null,
+    };
+  }
+
+  // Affirmative → proceed with escalation.
+  if (/^(yes|yeah|sure|ok|okay|go ahead|please do)\b/i.test(message.trim())) {
+    // Who should we send to? Prefer a caregiver if one exists.
+    const suggestions = await callTool<ResolveContactResult>(
+      "resolve_contact",
+      { userId: state.userId, reference: "caregiver" },
+    );
+
+    // Fall back to asking.
+    if (!suggestions.found) {
+      const all = suggestions.suggestions;
+      if (all.length === 0) {
+        state.pendingQuarantineEscalation = null;
+        return {
+          reply:
+            "You don't have any contacts saved. I've kept a note of this " +
+            "suspicious message in your activity log.",
+          conversationId: state.conversationId,
+          context: state.activeContext,
+          actions: [],
+          pendingConfirmation: null,
+        };
+      }
+
+      // Ask who to send it to, using the existing clarification state.
+      state.pendingContactClarification = {
+        suggestions: all,
+        relatedContextId: state.activeContext?.contextId ?? "",
+        originalRecipientRef: "caregiver",
+        createdAt: now(),
+      };
+
+      const names = all
+        .map((s) => `${s.displayName} (${s.relationship})`)
+        .join(", ");
+
+      return {
+        reply: `Who should I send the summary to? You have: ${names}.`,
+        conversationId: state.conversationId,
+        context: state.activeContext,
+        actions: [],
+        pendingConfirmation: null,
+      };
+    }
+
+    // Direct contact found — draft the sanitized summary.
+    return await draftQuarantineSummary(state, suggestions.contact!, pending);
+  }
+
+  return {
+    reply:
+      "Would you like me to send a safe summary to someone you trust? Yes or no.",
+    conversationId: state.conversationId,
+    context: state.activeContext,
+    actions: [],
+    pendingConfirmation: null,
+  };
+}
+
+async function draftQuarantineSummary(
+  state: ConversationState,
+  contact: ContactMatch,
+  pending: PendingQuarantineEscalation,
+): Promise<AgentOutput> {
+  const body =
+    `I got a message that looks like a scam. My assistant flagged it and ` +
+    `removed the link. The message said: "${pending.sanitizedContent}". ` +
+    `Can you take a look?`;
+
+  const draft = await callTool<{
+    draftId: string;
+    recipient: ContactMatch;
+    message: string;
+    requiresConfirmation: true;
+    confirmationToken: string;
+  }>("draft_family_message", {
+    userId: state.userId,
+    contactId: contact.contactId,
+    content: body,
+    relatedContextId: state.activeContext?.contextId,
+  });
+
+  const confirmation: PendingConfirmation = {
+    draftId: draft.draftId,
+    confirmationToken: draft.confirmationToken,
+    recipient: draft.recipient,
+    message: draft.message,
+    createdAt: now(),
+  };
+  state.pendingConfirmation = confirmation;
+  state.pendingQuarantineEscalation = null;
+
+  return {
+    reply:
+      `I can send ${contact.displayName} a ${contact.channel} message ` +
+      `saying: "${draft.message}" Should I send it?`,
+    conversationId: state.conversationId,
+    context: state.activeContext,
+    actions: [
+      {
+        type: "message_drafted",
+        summary: `Safe summary prepared for ${contact.displayName}`,
+        at: now(),
+      },
+    ],
+    pendingConfirmation: confirmation,
+  };
 }
 
 function recordTurn(
@@ -117,6 +287,13 @@ export async function handleMessage(input: AgentInput): Promise<AgentOutput> {
   const state = getOrCreateState(input.userId, input.conversationId);
   recordTurn(state, "user", input.message);
 
+  // Quarantine takes precedence over everything else.
+  if (state.pendingQuarantineEscalation) {
+    const output = await handleQuarantineResponse(state, input.message);
+    recordTurn(state, 'agent', output.reply);
+    return output;
+  }
+
   const planResult = await plan(input.message, state);
   logger.info("Planned intent", {
     conversationId: input.conversationId,
@@ -125,6 +302,9 @@ export async function handleMessage(input: AgentInput): Promise<AgentOutput> {
   });
 
   let output: AgentOutput;
+  if (state.pendingQuarantineEscalation) {
+    return await handleQuarantineResponse(state, input.message);
+  }
 
   switch (planResult.intent) {
     case "UNDERSTAND_MESSAGE":
@@ -168,6 +348,25 @@ async function handleUnderstand(
   state: ConversationState,
   userMessage: string,
 ): Promise<AgentOutput> {
+  // ── Threat scan runs first, before any extraction. ──────────
+  interface ThreatScanResult {
+    risk: "low" | "medium" | "high";
+    signals: Array<{ category: string; severity: string; evidence: string }>;
+    reasoning: string;
+    blockActions: boolean;
+  }
+
+  const threat = await callTool<ThreatScanResult>("scan_threat", {
+    content: userMessage,
+    source: "user_message",
+  });
+
+  logger.info("Threat scan", {
+    risk: threat.risk,
+    blockActions: threat.blockActions,
+    signalCount: threat.signals.length,
+  });
+
   // Analyze the user's actual message first.
   const directAnalysis = await callTool<AnalyzeMessageResult>(
     "analyze_message",
@@ -199,17 +398,27 @@ async function handleUnderstand(
     usedSource = source;
   }
 
+  // ── Persist context with the risk attached ─────────────────
   const actions: AgentAction[] = [];
   let activeContext: ContextMatch | null = state.activeContext;
 
   for (const entity of analyzed.entities) {
+    const dataWithRisk = {
+      ...entity.data,
+      __risk: {
+        level: threat.risk,
+        signals: threat.signals.map((s) => s.category),
+        blockActions: threat.blockActions,
+      },
+    };
+
     const saved = await callTool<{ contextId: string; saved: boolean }>(
       "save_context",
       {
         userId: state.userId,
         type: entity.type,
         key: entity.key,
-        data: entity.data,
+        data: dataWithRisk,
         source: usedSource,
       },
     );
@@ -218,13 +427,15 @@ async function handleUnderstand(
       contextId: saved.contextId,
       type: entity.type,
       key: entity.key,
-      data: entity.data,
+      data: dataWithRisk,
       createdAt: now(),
     };
 
     actions.push({
       type: "context_saved",
-      summary: `Saved ${entity.key}`,
+      summary: threat.blockActions
+        ? `Saved ${entity.key} (flagged as suspicious)`
+        : `Saved ${entity.key}`,
       at: now(),
     });
   }
@@ -233,6 +444,59 @@ async function handleUnderstand(
   state.activeContext = activeContext
     ? { ...activeContext, sourceContent }
     : null;
+
+  // ── Reply generation ──────────────────────────────────────
+  // For high risk, override the LLM and use a deterministic reply.
+  // This is the hard block: no LLM involvement, no chance of
+  // a prompt injection softening the warning.
+
+  if (threat.blockActions) {
+    const categoryList = Array.from(
+      new Set(threat.signals.map((s) => s.category.replace(/-/g, " "))),
+    ).join(", ");
+
+    // Sanitize the content so it's safe to forward without importing code from
+    // another package in this monorepo, which would trip rootDir/TS import rules.
+    const sanitizeForForwarding = (content: string) =>
+      content
+        .replace(/https?:\/\/\S+/gi, "[link removed]")
+        .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[email removed]")
+        .replace(/\b\d{10,}\b/g, "[phone removed]")
+        .slice(0, 280);
+
+    const sanitized = sanitizeForForwarding(userMessage);
+
+    state.pendingQuarantineEscalation = {
+      originalContent: userMessage,
+      sanitizedContent: sanitized,
+      riskSignals: Array.from(new Set(threat.signals.map((s) => s.category))),
+      createdAt: now(),
+    };
+
+    return {
+      reply:
+        `This message looks like a scam. I noticed: ${categoryList}. ` +
+        `I won't act on it — I won't send money, click the link, or share ` +
+        `any information. ` +
+        `If you'd like, I can send a safe summary to someone you trust so ` +
+        `they can help report it. Would you like me to do that?`,
+      conversationId: state.conversationId,
+      context: activeContext,
+      actions: [
+        {
+          type: "context_saved",
+          summary: `Saved ${activeContext?.key ?? "message"} (flagged as suspicious)`,
+          at: now(),
+        },
+      ],
+      pendingConfirmation: null,
+    };
+  }
+
+  const riskWarning =
+    threat.risk === "medium"
+      ? ` Note: this message has some patterns common in scam messages (${threat.signals.map((s) => s.category).join(", ")}). Be careful with links or payment requests.`
+      : "";
 
   const reply = await converse({
     system: RESPONSE_SYSTEM_PROMPT,
@@ -243,7 +507,7 @@ async function handleUnderstand(
           `The user received this message and asked you to explain it.\n\n` +
           `Message:\n${userMessage}\n\n` +
           `Extracted summary: ${analyzed.summary}\n\n` +
-          `Reply in one or two short spoken sentences.`,
+          `Reply in one or two short spoken sentences.${riskWarning}`,
       },
     ],
     temperature: 0.2,
@@ -535,6 +799,25 @@ async function handleDraftMessage(
         "Could you tell me what you'd like to share?",
       conversationId: state.conversationId,
       context: null,
+      actions: [],
+      pendingConfirmation: null,
+    };
+  }
+
+  // ── Block drafting if the context was flagged as suspicious ──
+  const risk = (ctx.data as Record<string, unknown>).__risk as
+    | { level: string; blockActions: boolean; signals: string[] }
+    | undefined;
+
+  if (risk?.blockActions) {
+    return {
+      reply:
+        `I can't send that. That message was flagged as suspicious ` +
+        `(${risk.signals.join(", ")}). If you'd like to send it anyway, ` +
+        `ask me to send a plain summary you write yourself, not the ` +
+        `original message.`,
+      conversationId: state.conversationId,
+      context: ctx,
       actions: [],
       pendingConfirmation: null,
     };
@@ -1233,7 +1516,7 @@ function matchContactByMessage(
     if (byName) return { ...byName, address: "" };
   }
 
-   // 3. Any word is a prefix of any part of a display name.
+  // 3. Any word is a prefix of any part of a display name.
   //    Handles partial names and slight misspellings.
   for (const word of words) {
     if (word.length < 3) continue;
@@ -1251,7 +1534,7 @@ function matchContactByMessage(
   const byFull = suggestions.find((s) =>
     s.displayName.toLowerCase().includes(lower),
   );
-  if (byFull) return { ...byFull, address: '' };
+  if (byFull) return { ...byFull, address: "" };
 
   // Display name prefix match
   // const byName = suggestions.find((s) => {

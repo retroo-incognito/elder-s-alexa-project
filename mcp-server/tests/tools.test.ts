@@ -29,14 +29,24 @@ vi.mock('../src/db/drafts.js', () => ({
   listRecentDrafts: vi.fn(),
 }));
 
+vi.mock('../src/db/contacts.js', () => ({
+  getContact: vi.fn(),
+  findContacts: vi.fn(),
+  listContacts: vi.fn(),
+  addContact: vi.fn(),
+  deleteContact: vi.fn(),
+}));
+
 import { buildServer } from '../src/build-server.js';
 import * as contexts from '../src/db/contexts.js';
 import * as reminders from '../src/db/reminders.js';
 import * as drafts from '../src/db/drafts.js';
+import * as contacts from '../src/db/contacts.js';
 
 const mockContexts = vi.mocked(contexts);
 const mockReminders = vi.mocked(reminders);
 const mockDrafts = vi.mocked(drafts);
+const mockContacts = vi.mocked(contacts);
 
 // ─────────────────────────────────────────────────────────────
 // Test harness: real MCP client + server, wired in-memory
@@ -264,10 +274,19 @@ describe('reminders', () => {
 
 describe('draft_family_message', () => {
   it('issues a confirmation token and does NOT send', async () => {
+    mockContacts.getContact.mockResolvedValueOnce({
+      contactId: 'c-1',
+      userId: 'u1',
+      displayName: 'Priya',
+      relationship: 'daughter',
+      channel: 'whatsapp',
+      address: '+919876543210',
+      createdAt: '2026-09-27T07:00:00Z',
+    });
     mockDrafts.createDraft.mockResolvedValueOnce({
       userId: 'u1',
       draftId: 'd-1',
-      recipient: 'daughter',
+      recipient: 'Priya',
       content: 'My bill is due.',
       status: 'draft',
       createdAt: '2026-09-27T07:00:00Z',
@@ -277,7 +296,7 @@ describe('draft_family_message', () => {
     await withClient(async (client) => {
       const result = await call(client, 'draft_family_message', {
         userId: 'u1',
-        recipient: 'daughter',
+        contactId: 'c-1',
         content: 'My bill is due.',
       });
 

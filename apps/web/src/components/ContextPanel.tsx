@@ -1,4 +1,4 @@
-import type { ContextMatch } from "../types";
+import type { ContextMatch, ContextRisk } from "../types";
 
 interface Props {
   context: ContextMatch | null;
@@ -58,6 +58,29 @@ function formatFieldLabel(key: string): string {
     .replace(/^./, (c) => c.toUpperCase())
     .trim();
 }
+
+function RiskBadge({ risk }: { risk: ContextRisk | undefined }) {
+  if (!risk || risk.level === 'low') return null;
+
+  const label = risk.level === 'high' ? 'Flagged as suspicious' : 'Caution';
+  const className =
+    risk.level === 'high'
+      ? 'context-card__risk context-card__risk--high'
+      : 'context-card__risk context-card__risk--medium';
+
+  return (
+    <div className={className}>
+      <div className="context-card__risk-label">{label}</div>
+      {risk.signals.length > 0 && (
+        <div className="context-card__risk-signals">
+          {risk.signals.map((s) => s.replace(/-/g, ' ')).join(' · ')}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 export function ContextPanel({ context }: Props) {
   if (!context) {
     return (
@@ -82,9 +105,11 @@ export function ContextPanel({ context }: Props) {
     const amount = formatCurrency(data.amount, data.currency);
     const dueDate = formatDate(data.dueDate);
     const provider = typeof data.provider === "string" ? data.provider : "Bill";
+    const risk = (data.__risk as ContextRisk | undefined);
 
     return (
       <div className="context-card">
+        <RiskBadge risk={risk} />
         <div className="context-card__header">
           <span className="context-card__badge">{provider}</span>
         </div>

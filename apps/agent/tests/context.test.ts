@@ -40,8 +40,8 @@ describe('extractRecipient', () => {
     expect(extractRecipient('text my wife the details')).toBe('wife');
   });
 
-  it('returns "family" as fallback when no recipient is found', () => {
-    expect(extractRecipient('do it')).toBe('family');
+  it('returns null when no recipient is found', () => {
+    expect(extractRecipient('do it')).toBeNull();
   });
 });
 

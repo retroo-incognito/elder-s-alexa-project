@@ -9,6 +9,7 @@ const TOOL_LEVELS: Record<string, SafetyLevel> = {
   analyze_message: SafetyLevel.READ,
   get_context: SafetyLevel.READ,
   get_reminders: SafetyLevel.READ,
+  scan_threat: SafetyLevel.READ,  
   save_context: SafetyLevel.LOW_RISK,
   create_reminder: SafetyLevel.LOW_RISK,
   draft_family_message: SafetyLevel.LOW_RISK,

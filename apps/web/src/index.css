@@ -1678,3 +1678,35 @@ body { background: var(--bg); }
   margin-left: 8px;
   font-style: italic;
 }
+
+.context-card__risk {
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+
+.context-card__risk--high {
+  background: var(--error-soft);
+  border: 1px solid #f5c4c0;
+  color: var(--error);
+}
+
+.context-card__risk--medium {
+  background: var(--amber-soft);
+  border: 1px solid #f0d9b5;
+  color: var(--amber);
+}
+
+.context-card__risk-label {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+.context-card__risk-signals {
+  margin-top: 4px;
+  opacity: 0.85;
+  font-size: 12px;
+}

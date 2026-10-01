@@ -242,3 +242,36 @@ export const ResolveContactOutput = z.object({
       'When no exact match, other contacts the user might have meant.',
     ),
 });
+
+export const ScanThreatInput = z.object({
+  content: z
+    .string()
+    .min(1)
+    .describe('The raw message or document text to scan.'),
+  source: z
+    .string()
+    .optional()
+    .describe('Provenance hint, e.g. "sms", "email", "uploaded".'),
+  senderId: z
+    .string()
+    .optional()
+    .describe(
+      'Sender identifier when available, e.g. "KAI-CLINIC". ' +
+        'Used to check the trusted-sender allow-list.',
+    ),
+});
+
+export const ScanThreatOutput = z.object({
+  risk: z.enum(['low', 'medium', 'high']),
+  signals: z.array(
+    z.object({
+      category: z.string(),
+      severity: z.enum(['low', 'medium', 'high']),
+      evidence: z.string(),
+      matchedAgainst: z.enum(['raw', 'normalized']),
+    }),
+  ),
+  reasoning: z.string(),
+  blockActions: z.boolean(),
+  allowListed: z.boolean(),
+});

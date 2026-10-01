@@ -78,6 +78,15 @@ function setupUnderstandPath(): void {
 
   // MCP tools for understand
   mockCallTool.mockImplementation(async (name) => {
+    if (name === 'scan_threat') {
+      return {
+        risk: 'low',
+        signals: [],
+        reasoning: 'No threat detected',
+        blockActions: false,
+        allowListed: false,
+      };
+    }
     if (name === 'analyze_message') return BILL_ANALYSIS;
     if (name === 'save_context')
       return { contextId: 'ctx-1', saved: true };
@@ -244,10 +253,29 @@ describe('Test D — draft, confirm, send', () => {
       planResponse('DRAFT_MESSAGE', 'that bill'),
     );
     mockCallTool.mockImplementation(async (name) => {
+      if (name === 'resolve_contact') {
+        return {
+          found: true,
+          contact: {
+            contactId: 'c1',
+            displayName: 'Priya',
+            relationship: 'daughter',
+            channel: 'whatsapp',
+            address: '+1234567890',
+          },
+          suggestions: [],
+        };
+      }
       if (name === 'draft_family_message') {
         return {
           draftId: 'd-1',
-          recipient: 'daughter',
+          recipient: {
+            contactId: 'c1',
+            displayName: 'Priya',
+            relationship: 'daughter',
+            channel: 'whatsapp',
+            address: '+1234567890',
+          },
           message: "My electricity bill is ₹1,842 and it's due 15 October.",
           requiresConfirmation: true,
           confirmationToken: 'tok-abc',
@@ -324,10 +352,29 @@ describe('Test E — send without confirmation MUST NOT SEND', () => {
     const calledTools: string[] = [];
     mockCallTool.mockImplementation(async (name) => {
       calledTools.push(name);
+      if (name === 'resolve_contact') {
+        return {
+          found: true,
+          contact: {
+            contactId: 'c1',
+            displayName: 'Priya',
+            relationship: 'daughter',
+            channel: 'whatsapp',
+            address: '+1234567890',
+          },
+          suggestions: [],
+        };
+      }
       if (name === 'draft_family_message') {
         return {
           draftId: 'd-1',
-          recipient: 'daughter',
+          recipient: {
+            contactId: 'c1',
+            displayName: 'Priya',
+            relationship: 'daughter',
+            channel: 'whatsapp',
+            address: '+1234567890',
+          },
           message: 'My bill is due.',
           requiresConfirmation: true,
           confirmationToken: 'tok-abc',
@@ -362,10 +409,29 @@ describe('Test E — send without confirmation MUST NOT SEND', () => {
       planResponse('DRAFT_MESSAGE', null),
     );
     mockCallTool.mockImplementation(async (name) => {
+      if (name === 'resolve_contact') {
+        return {
+          found: true,
+          contact: {
+            contactId: 'c1',
+            displayName: 'Priya',
+            relationship: 'daughter',
+            channel: 'whatsapp',
+            address: '+1234567890',
+          },
+          suggestions: [],
+        };
+      }
       if (name === 'draft_family_message') {
         return {
           draftId: 'd-1',
-          recipient: 'daughter',
+          recipient: {
+            contactId: 'c1',
+            displayName: 'Priya',
+            relationship: 'daughter',
+            channel: 'whatsapp',
+            address: '+1234567890',
+          },
           message: 'X',
           requiresConfirmation: true,
           confirmationToken: 'tok-abc',
@@ -418,10 +484,29 @@ describe('Test E — send without confirmation MUST NOT SEND', () => {
       planResponse('DRAFT_MESSAGE', null),
     );
     mockCallTool.mockImplementation(async (name) => {
+      if (name === 'resolve_contact') {
+        return {
+          found: true,
+          contact: {
+            contactId: 'c1',
+            displayName: 'Priya',
+            relationship: 'daughter',
+            channel: 'whatsapp',
+            address: '+1234567890',
+          },
+          suggestions: [],
+        };
+      }
       if (name === 'draft_family_message') {
         return {
           draftId: 'd-1',
-          recipient: 'daughter',
+          recipient: {
+            contactId: 'c1',
+            displayName: 'Priya',
+            relationship: 'daughter',
+            channel: 'whatsapp',
+            address: '+1234567890',
+          },
           message: 'X',
           requiresConfirmation: true,
           confirmationToken: 'tok-abc',

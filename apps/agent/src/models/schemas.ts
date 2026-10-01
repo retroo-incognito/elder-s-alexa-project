@@ -101,3 +101,22 @@ export interface PendingContactClarification {
   originalRecipientRef: string;
   createdAt: string;
 }
+
+export interface PendingQuarantineEscalation {
+  originalContent: string;
+  sanitizedContent: string;
+  riskSignals: string[];
+  createdAt: string;
+}
+
+export interface ConversationState {
+  conversationId: string;
+  userId: string;
+  recentTurns: Array<{ role: 'user' | 'agent'; text: string; at: string }>;
+  activeContext: ContextMatch | null;
+  pendingConfirmation: PendingConfirmation | null;
+  pendingContactClarification: PendingContactClarification | null;
+  pendingQuarantineEscalation: PendingQuarantineEscalation | null;  // ← add
+  createdAt: string;
+  updatedAt: string;
+}

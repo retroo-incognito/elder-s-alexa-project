@@ -53,3 +53,18 @@ export interface PendingConfirmation {
   message: string;
   createdAt: string;
 }
+
+export interface ContextRisk {
+  level: 'low' | 'medium' | 'high';
+  signals: string[];
+  blockActions: boolean;
+}
+
+export interface ContextMatch {
+  contextId: string;
+  type: string;
+  key: string;
+  data: Record<string, unknown>;
+  createdAt: string;
+  sourceContent?: string;
+}

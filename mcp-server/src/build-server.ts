@@ -4,6 +4,7 @@ import { registerContextTools } from './tools/context.js';
 import { registerReminderTools } from './tools/reminders.js';
 import { registerMessagingTools } from './tools/messaging.js';
 import { registerContactTools } from './tools/contacts.js';
+import { registerThreatScanTool } from './tools/threat-scan.js';
 
 /**
  * Build a fresh McpServer with all seven tools registered.
@@ -21,6 +22,7 @@ export function buildServer(): McpServer {
   registerReminderTools(server);
   registerMessagingTools(server);
   registerContactTools(server);
+  registerThreatScanTool(server);
 
   return server;
 }

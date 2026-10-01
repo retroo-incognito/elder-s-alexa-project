@@ -123,48 +123,6 @@ export async function resolveContext(
  * Extracts a recipient from a "tell X" or "message X" phrase.
  * Returns "daughter" from "tell my daughter about it".
  */
-// export function extractRecipient(message: string): string | null {
-//   const lower = message.toLowerCase();
-
-//   // Possessive + relationship word
-//   const possessive = lower.match(/\b(?:my|our)\s+([a-z]+)/g);
-//   if (possessive) {
-//     for (const match of possessive) {
-//       const word = match.replace(/^(?:my|our)\s+/, '');
-//       const rel = normalizeRelationship(word);
-//       if (rel) {
-//         // A known relationship word was found. If it's generic,
-//         // signal that clarification is needed.
-//         if (GENERIC_RECIPIENTS.has(rel)) return null;
-//         return rel;
-//       }
-//     }
-//   }
-
-//   // Direct verb + name
-//   const direct = lower.match(
-//     /\b(?:tell|notify|inform|call)\s+(?:my\s+|our\s+)?([a-z]+)/i,
-//   );
-//   if (direct?.[1] && !STOP_WORDS.has(direct[1])) {
-//     const rel = normalizeRelationship(direct[1]);
-//     if (rel && GENERIC_RECIPIENTS.has(rel)) return null;
-//     return direct[1];
-//   }
-
-//   // Indirect: send ... to <relationship>
-//   const indirect = lower.match(
-//     /\b(?:send|share|forward|give)\b[^.!?]*?\b(?:to|with)\s+(?:my\s+|our\s+)?([a-z]+)/i,
-//   );
-//   if (indirect?.[1]) {
-//     const rel = normalizeRelationship(indirect[1]);
-//     if (rel) {
-//       if (GENERIC_RECIPIENTS.has(rel)) return null;
-//       return rel;
-//     }
-//   }
-
-//   return null;
-// }
 
 export function extractRecipient(message: string): string | null {
   const lower = message.toLowerCase();
