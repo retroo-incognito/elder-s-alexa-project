@@ -275,3 +275,20 @@ export const ScanThreatOutput = z.object({
   blockActions: z.boolean(),
   allowListed: z.boolean(),
 });
+
+export const ListRecentContextsInput = z.object({
+  userId: z.string(),
+  limit: z.number().int().positive().max(50).default(20),
+});
+
+export const ListRecentContextsOutput = z.object({
+  contexts: z.array(
+    z.object({
+      contextId: z.string(),
+      type: z.string(),
+      key: z.string(),
+      data: z.record(z.string(), z.unknown()),
+      createdAt: z.string(),
+    }),
+  ),
+});

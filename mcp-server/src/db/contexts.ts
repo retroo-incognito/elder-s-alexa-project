@@ -119,3 +119,20 @@ export async function deleteContext(
     }),
   );
 }
+
+
+export async function listRecentContexts(
+  userId: UserId,
+  limit = 20,
+): Promise<ContextRecord[]> {
+  const result = await ddb.send(
+    new QueryCommand({
+      TableName: TABLE,
+      KeyConditionExpression: 'userId = :u',
+      ExpressionAttributeValues: { ':u': userId },
+      Limit: limit,
+      ScanIndexForward: false,
+    }),
+  );
+  return (result.Items ?? []) as ContextRecord[];
+}

@@ -60,38 +60,89 @@ app.post("/api/proactive/morning", async (req, res) => {
         }>;
       }>("get_reminders", { userId, status: "active" }),
       callTool<{
-        matches: Array<{
+        contexts: Array<{
           contextId: string;
           type: string;
           key: string;
           data: Record<string, unknown>;
           createdAt: string;
         }>;
-      }>("get_context", { userId, query: "recent" }),
+      }>("list_recent_contexts", { userId, limit: 20 }),
     ]);
 
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    // ── Date helpers (local-time based) ──────────────────────
+    const now = new Date();
+    const todayStart = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+    );
+    const tomorrowStart = new Date(todayStart);
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
 
-    const todayStr = today.toISOString().slice(0, 10);
-    const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+    /**
+     * Parses a date value in local time. Handles:
+     *   - ISO date-only: "2026-10-04"  → local Oct 4
+     *   - ISO datetime:  "2026-10-04T09:00:00Z"  → converted to local day
+     *   - Natural:       "October 4" / "4 October"  → current year
+     */
+    function parseLocalDate(value: string): Date | null {
+      const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|[T\s])/);
+      if (iso) {
+        return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+      }
+
+      const d = new Date(value);
+      if (!Number.isNaN(d.getTime())) {
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      }
+
+      const y = new Date().getFullYear();
+      for (const attempt of [`${value} ${y}`, `${y} ${value}`]) {
+        const parsed = new Date(attempt);
+        if (!Number.isNaN(parsed.getTime())) {
+          return new Date(
+            parsed.getFullYear(),
+            parsed.getMonth(),
+            parsed.getDate(),
+          );
+        }
+      }
+      return null;
+    }
+
+    function classifyDate(
+      value: unknown,
+    ): "today" | "tomorrow" | "later" | "past" | null {
+      if (typeof value !== "string" || value.length === 0) return null;
+
+      const day = parseLocalDate(value);
+      if (!day) return null;
+
+      const t = day.getTime();
+      if (t < todayStart.getTime()) return "past";
+      if (t === todayStart.getTime()) return "today";
+      if (t === tomorrowStart.getTime()) return "tomorrow";
+      return "later";
+    }
 
     const items: string[] = [];
 
-    // Reminders due today
+    // ── Reminders due today or tomorrow ──────────────────────
     for (const r of reminders.reminders) {
-      const d = new Date(r.scheduledAt).toISOString().slice(0, 10);
-      if (d === todayStr) {
-        items.push(`A reminder: ${r.title}`);
-      }
+      const bucket = classifyDate(r.scheduledAt);
+      if (bucket !== "today" && bucket !== "tomorrow") continue;
+      items.push(
+        bucket === "today"
+          ? `A reminder today: ${r.title}`
+          : `A reminder tomorrow: ${r.title}`,
+      );
     }
 
-    // Contexts with deadlines in next 48 hours
-    for (const c of contexts.matches) {
+    // ── Contexts due in next 48 hours ────────────────────────
+    for (const c of contexts.contexts) {
       const data = c.data as Record<string, unknown>;
 
-      // Skip flagged messages
       const risk = data.__risk as { level?: string } | undefined;
       if (risk?.level === "high") continue;
 
@@ -102,7 +153,9 @@ app.post("/api/proactive/morning", async (req, res) => {
 
       if (!dateField) continue;
 
-      const dateStr = String(dateField).slice(0, 10);
+      const bucket = classifyDate(dateField);
+      if (bucket !== "today" && bucket !== "tomorrow") continue;
+
       const label =
         c.type === "bill"
           ? `Your ${(data.provider as string) ?? "bill"} for ₹${data.amount}`
@@ -110,11 +163,11 @@ app.post("/api/proactive/morning", async (req, res) => {
             ? `Your appointment with ${(data.doctorName as string) ?? "the doctor"}`
             : `Your ${c.type}`;
 
-      if (dateStr === todayStr) {
-        items.push(`${label} is today`);
-      } else if (dateStr === tomorrowStr) {
-        items.push(`${label} is tomorrow`);
-      }
+      items.push(
+        bucket === "today"
+          ? `${label} is due today`
+          : `${label} is due tomorrow`,
+      );
     }
 
     if (items.length === 0) {

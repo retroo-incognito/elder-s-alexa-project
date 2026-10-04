@@ -3,6 +3,8 @@ import type * as z from "zod/v4";
 import {
   GetContextInput,
   GetContextOutput,
+  ListRecentContextsInput,
+  ListRecentContextsOutput,
   SaveContextInput,
   SaveContextOutput,
 } from "../schemas/tool-schemas.js";
@@ -116,4 +118,31 @@ export function registerContextTools(server: McpServer): void {
       };
     },
   );
+  server.registerTool(
+  'list_recent_contexts',
+  {
+    title: 'List Recent Contexts',
+    description:
+      'List the most recently saved contexts for a user, regardless of type. ' +
+      'Use this for briefings, activity feeds, or when no specific type is known.',
+    inputSchema: ListRecentContextsInput,
+    outputSchema: ListRecentContextsOutput,
+  },
+  async ({ userId, limit }) => {
+    const records = await contexts.listRecentContexts(userId, limit);
+    const result = {
+      contexts: records.map((r) => ({
+        contextId: r.contextId,
+        type: r.type,
+        key: r.key,
+        data: r.data,
+        createdAt: r.createdAt,
+      })),
+    };
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result) }],
+      structuredContent: result,
+    };
+  },
+);
 }
