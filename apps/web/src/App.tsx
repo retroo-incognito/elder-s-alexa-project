@@ -374,7 +374,6 @@ export default function App() {
           <section className="command-section" aria-labelledby="command-title">
             <div className="section-heading">
               <div>
-                <span className="eyebrow">01 / YOUR NEXT STEP</span>
                 <h2 id="command-title">What can we make easier?</h2>
               </div>
               <span className="command-tag">
@@ -487,7 +486,6 @@ export default function App() {
           <section className="output-section" aria-live="polite">
             <div className="section-heading output-heading">
               <div>
-                <span className="eyebrow">02 / LIVE WORKSPACE</span>
                 <h2>
                   {view === "home"
                     ? "What’s happening"
