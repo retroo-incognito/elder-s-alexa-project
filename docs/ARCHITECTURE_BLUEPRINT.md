@@ -881,6 +881,80 @@ The persistence layer uses 6 Amazon DynamoDB tables with on-demand capacity (`PA
 
 ---
 
+## 6A Proactive Assistance
+
+The agent is not purely reactive. It initiates conversations when there
+is something worth saying — an appointment today, a bill due tomorrow,
+a reminder the user set that is now relevant.
+
+### Architecture
+
+A scheduled trigger runs a "morning briefing" flow every day:
+
+    Amazon EventBridge (08:00 daily)
+        │
+        ▼
+    Orchestrator: /api/proactive/morning
+        │
+        ├── reads independence-reminders (status: active)
+        ├── reads independence-context (upcoming deadlines)
+        ├── determines what matters today
+        └── generates a plain-language briefing
+        │
+        ▼
+    Delivered to the user's device
+    (Echo Show, Echo speaker, or the web UI)
+
+### What the briefing contains
+
+The agent speaks only when there is something to say. If nothing is
+due today or tomorrow, it stays silent. When there is:
+
+- Appointments happening today, with time and location
+- Reminders the user set that fire today
+- Bills due in the next 48 hours, with amount and due date
+- Anything flagged as suspicious in the last 24 hours
+
+Example announcement:
+
+> "Good morning. You have a clinic appointment at 10:30 AM today with
+> Dr. Meera. Your property tax bill is due tomorrow. Would you like me
+> to set a reminder to pay it today?"
+
+### Why this matters for the product
+
+Reactive agents require the user to remember to ask. For the target
+audience — adults who find digital services difficult — remembering to
+ask is itself part of the problem. A proactive agent removes that burden.
+
+This is what makes the product feel like a companion rather than a tool.
+It also matches Alexa+'s direction toward ambient assistance.
+
+### What's built today vs. specified
+
+- **Built:** All the data the briefing needs is already in DynamoDB —
+  reminders, contexts, and their dates. The orchestrator can already
+  query it through existing MCP tools.
+- **Specified:** The EventBridge schedule and the delivery mechanism
+  to an Echo device. In the web UI, the briefing would appear as an
+  agent-initiated turn when the page is next opened.
+
+### AWS components
+
+| Service | Role |
+|---|---|
+| EventBridge | Daily schedule trigger |
+| Lambda | Runs the briefing orchestration |
+| DynamoDB | Source of reminders and contexts |
+| Bedrock or OpenAI | Generates the plain-language summary |
+| Alexa device or web UI | Delivers the briefing |
+
+### Local development alternative
+
+For local development and the hackathon demo, the EventBridge trigger
+is replaced with a `node-cron` scheduler running inside the agent
+process. The flow is identical — only the trigger source differs.
+
 ## 7. Request Lifecycle — One Worked Example
 
 Below is the complete trace of the Hero Electricity Bill Scenario across the entire stack.
@@ -1225,6 +1299,50 @@ Because multi-step LLM extraction and DynamoDB persistence require 1.0–1.8 sec
 - **Immediate Cancellation:** The instant the agent HTTP response arrives, `stopSpeaking()` immediately cancels any active speech synthesis and clears the masking timer, ensuring zero conversational delay.
 
 ---
+
+## 9A APL Mapping — How the UI Would Render on Echo Show
+
+The web UI is a React application that runs in a browser. For Echo Show
+devices, the same agent responses would be rendered through Alexa
+Presentation Language (APL), Amazon's JSON-based declarative UI framework.
+
+The web UI and an APL client consume the same agent responses — the same
+ContextMatch, the same PendingConfirmation, the same AgentAction array.
+Only the rendering layer differs.
+
+### Component mapping
+
+| Web UI component | APL equivalent |
+|---|---|
+| App.tsx three-panel layout | Container with direction "row", collapsing to "column" on narrow viewports |
+| Conversation.tsx | Sequence with scrollDirection "vertical" |
+| ContextPanel.tsx | Container with Text elements, or the AlexaDetail template |
+| ActionsPanel.tsx | AlexaTextList |
+| ConfirmationPrompt.tsx | Custom Container with two TouchWrapper children |
+| VoiceInput.tsx | Not needed — Echo Show has native far-field microphones |
+| Composer text input | EditText, or voice on touch-only devices |
+
+### The confirmation gate on Echo Show
+
+The amber confirmation prompt is the product's most safety-critical
+screen. On Echo Show it renders as a high-contrast APL document with:
+
+- Touch targets of 120px height (far above Amazon's 48×48px minimum)
+- Text contrast ratios above 4.5:1
+- Every element labelled with accessibilityLabel for VoiceView
+- Voice-only completion: the user can say "yes" or "no" without touching
+- No motion that flashes or blinks, per Amazon accessibility guidance
+
+### What's built today vs. specified
+
+- **Built:** Web UI (React 19 + Vite 6) — running now
+- **Specified:** APL documents — the mapping above
+
+Connecting an Echo Show to the agent requires registering the MCP server
+as an Alexa+ add-on (partner-only access today), then adding APL
+directives to the Alexa skill's response layer. The agent, MCP server,
+and data model do not change — only the rendering layer.
+
 
 ## 10. What's Real vs. Simulated
 
