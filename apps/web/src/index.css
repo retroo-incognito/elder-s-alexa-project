@@ -1710,3 +1710,219 @@ body { background: var(--bg); }
   opacity: 0.85;
   font-size: 12px;
 }
+
+/* ─── APL Preview ──────────────────────────────────────── */
+
+.apl-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 20px;
+  background: #1a1a1a;
+  min-height: 100vh;
+}
+
+.apl-preview__device {
+  width: 100%;
+  max-width: 900px;
+  aspect-ratio: 1280 / 800;
+  background: #2a2a2a;
+  border-radius: 32px;
+  padding: 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+
+.apl-preview__screen {
+  width: 100%;
+  height: 100%;
+  background: #ffffff;
+  border-radius: 16px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.apl-preview__caption {
+  margin-top: 24px;
+  color: #9a9a9a;
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.apl-screen {
+  width: 100%;
+  height: 100%;
+  padding: 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* ─── Confirmation screen ─────────────────────────────── */
+
+.apl-screen--confirm {
+  background: #fdf3e3;
+  gap: 20px;
+}
+
+.apl-confirm__heading {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #c9770a;
+  margin-bottom: 12px;
+}
+
+.apl-confirm__row {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+
+.apl-confirm__label {
+  font-size: 20px;
+  color: #6b6b6b;
+}
+
+.apl-confirm__name {
+  font-size: 30px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.apl-confirm__channel {
+  font-size: 18px;
+  color: #6b6b6b;
+  margin-bottom: 12px;
+}
+
+.apl-confirm__message {
+  background: #ffffff;
+  border-left: 5px solid #c9770a;
+  border-radius: 8px;
+  padding: 24px 28px;
+  font-size: 24px;
+  color: #1a1a1a;
+  max-width: 700px;
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.apl-confirm__buttons {
+  display: flex;
+  gap: 24px;
+  width: 100%;
+  max-width: 720px;
+}
+
+.apl-confirm__yes,
+.apl-confirm__no {
+  flex: 1;
+  height: 110px;
+  border-radius: 16px;
+  font-size: 28px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+}
+
+.apl-confirm__yes {
+  background: #c9770a;
+  color: #ffffff;
+}
+
+.apl-confirm__no {
+  background: #ffffff;
+  color: #6b6b6b;
+  border: 2px solid #e4e4df;
+}
+
+/* ─── Context screen ──────────────────────────────────── */
+
+.apl-context__badge {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #1a6e5c;
+  background: #e6f1ee;
+  padding: 8px 16px;
+  border-radius: 999px;
+  margin-bottom: 20px;
+}
+
+.apl-context__amount {
+  font-size: 96px;
+  font-weight: 700;
+  color: #1a6e5c;
+  margin-bottom: 16px;
+}
+
+.apl-context__field {
+  font-size: 28px;
+  color: #1a1a1a;
+  display: flex;
+  gap: 20px;
+}
+
+/* ─── Briefing screen ─────────────────────────────────── */
+
+.apl-briefing__greeting {
+  font-size: 36px;
+  font-weight: 600;
+  color: #1a6e5c;
+  margin-bottom: 24px;
+}
+
+.apl-briefing__line {
+  font-size: 26px;
+  color: #1a1a1a;
+  line-height: 1.5;
+  margin-bottom: 12px;
+  text-align: center;
+  max-width: 800px;
+}
+
+
+.briefing {
+  margin: 16px 16px 0;
+  padding: 14px 16px;
+  background: var(--accent-soft);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius);
+  position: relative;
+}
+
+.briefing__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.briefing__text {
+  font-size: 14px;
+  color: var(--ink);
+  line-height: 1.5;
+}
+
+.briefing__dismiss {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: transparent;
+  border: none;
+  color: var(--ink-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.briefing__dismiss:hover {
+  color: var(--ink);
+}

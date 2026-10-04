@@ -6,6 +6,7 @@ import {
   EXTRACTION_SYSTEM_PROMPT,
   normalizeExtraction,
   type RawExtraction,
+  dateHeader,
 } from './schema.js';
 import type { ExtractionProvider } from './types.js';
 
@@ -20,14 +21,14 @@ function getClient(): OpenAI {
   return client;
 }
 
-export const openaiExtractor: ExtractionProvider = {
+export const openaiExtractor: ExtractionProvider = {  
   name: 'openai',
 
   async extract(content: string) {
     const response = await getClient().chat.completions.parse({
       model: config.OPENAI_EXTRACTION_MODEL,
       messages: [
-        { role: 'system', content: EXTRACTION_SYSTEM_PROMPT },
+        { role: 'system', content: `${dateHeader}\n\n${EXTRACTION_SYSTEM_PROMPT}` },
         { role: 'user', content },
       ],
       response_format: zodResponseFormat(

@@ -883,77 +883,56 @@ The persistence layer uses 6 Amazon DynamoDB tables with on-demand capacity (`PA
 
 ## 6A Proactive Assistance
 
-The agent is not purely reactive. It initiates conversations when there
-is something worth saying — an appointment today, a bill due tomorrow,
-a reminder the user set that is now relevant.
+The agent is not purely reactive. It initiates a briefing when there is
+something worth saying — an appointment today, a bill due tomorrow, a
+reminder coming up.
 
-### Architecture
+### Local implementation
 
-A scheduled trigger runs a "morning briefing" flow every day:
+The agent exposes `POST /api/proactive/morning`, which:
 
-    Amazon EventBridge (08:00 daily)
+1. Reads active reminders from `independence-reminders`
+2. Reads recent contexts from `independence-context`
+3. Filters for items due today or tomorrow
+4. Skips anything flagged as high-risk
+5. Returns a plain-language briefing, or `{ speak: false }` if there is
+   nothing to report
+
+The web UI calls this endpoint on page load, once per day per browser
+session. The briefing renders as a card above the conversation until the
+user dismisses it.
+
+### Production path
+
+In production, the trigger is Amazon EventBridge firing at 08:00 local
+time, invoking a Lambda that calls the same endpoint. The Lambda's
+response is delivered to the user's Alexa device as an agent-initiated
+turn.
+
+    EventBridge (08:00 daily)
         │
         ▼
-    Orchestrator: /api/proactive/morning
-        │
-        ├── reads independence-reminders (status: active)
-        ├── reads independence-context (upcoming deadlines)
-        ├── determines what matters today
-        └── generates a plain-language briefing
+    Lambda → POST /api/proactive/morning
         │
         ▼
-    Delivered to the user's device
-    (Echo Show, Echo speaker, or the web UI)
+    Alexa device or web UI
 
-### What the briefing contains
+The endpoint, the data sources, and the briefing logic are identical
+between local and production. Only the trigger changes.
 
-The agent speaks only when there is something to say. If nothing is
-due today or tomorrow, it stays silent. When there is:
+### Design principle
 
-- Appointments happening today, with time and location
-- Reminders the user set that fire today
-- Bills due in the next 48 hours, with amount and due date
-- Anything flagged as suspicious in the last 24 hours
+Reactive agents require the user to remember to ask. For adults who find
+digital services difficult, remembering to ask is part of the problem.
+A proactive agent removes that burden — and it is what makes the product
+feel like a companion rather than a tool.
 
-Example announcement:
+### Silence is a feature
 
-> "Good morning. You have a clinic appointment at 10:30 AM today with
-> Dr. Meera. Your property tax bill is due tomorrow. Would you like me
-> to set a reminder to pay it today?"
-
-### Why this matters for the product
-
-Reactive agents require the user to remember to ask. For the target
-audience — adults who find digital services difficult — remembering to
-ask is itself part of the problem. A proactive agent removes that burden.
-
-This is what makes the product feel like a companion rather than a tool.
-It also matches Alexa+'s direction toward ambient assistance.
-
-### What's built today vs. specified
-
-- **Built:** All the data the briefing needs is already in DynamoDB —
-  reminders, contexts, and their dates. The orchestrator can already
-  query it through existing MCP tools.
-- **Specified:** The EventBridge schedule and the delivery mechanism
-  to an Echo device. In the web UI, the briefing would appear as an
-  agent-initiated turn when the page is next opened.
-
-### AWS components
-
-| Service | Role |
-|---|---|
-| EventBridge | Daily schedule trigger |
-| Lambda | Runs the briefing orchestration |
-| DynamoDB | Source of reminders and contexts |
-| Bedrock or OpenAI | Generates the plain-language summary |
-| Alexa device or web UI | Delivers the briefing |
-
-### Local development alternative
-
-For local development and the hackathon demo, the EventBridge trigger
-is replaced with a `node-cron` scheduler running inside the agent
-process. The flow is identical — only the trigger source differs.
+The agent does not speak when there is nothing to say. The endpoint
+returns `{ speak: false }` and the UI shows no card. A briefing that
+fires every day with "You have nothing scheduled" would train the user
+to ignore it. The briefing appears only when it has content.
 
 ## 7. Request Lifecycle — One Worked Example
 
@@ -1302,46 +1281,61 @@ Because multi-step LLM extraction and DynamoDB persistence require 1.0–1.8 sec
 
 ## 9A APL Mapping — How the UI Would Render on Echo Show
 
-The web UI is a React application that runs in a browser. For Echo Show
-devices, the same agent responses would be rendered through Alexa
-Presentation Language (APL), Amazon's JSON-based declarative UI framework.
+The web UI is a React application running in a browser. For Echo Show
+devices, the same agent responses would render through Alexa Presentation
+Language (APL), Amazon's JSON-based declarative UI framework.
 
-The web UI and an APL client consume the same agent responses — the same
-ContextMatch, the same PendingConfirmation, the same AgentAction array.
-Only the rendering layer differs.
+Both clients consume the same `ContextMatch`, `PendingConfirmation`, and
+`AgentAction[]` data from the agent. Only the rendering layer differs.
 
 ### Component mapping
 
-| Web UI component | APL equivalent |
+| Web UI | APL equivalent |
 |---|---|
-| App.tsx three-panel layout | Container with direction "row", collapsing to "column" on narrow viewports |
-| Conversation.tsx | Sequence with scrollDirection "vertical" |
-| ContextPanel.tsx | Container with Text elements, or the AlexaDetail template |
-| ActionsPanel.tsx | AlexaTextList |
-| ConfirmationPrompt.tsx | Custom Container with two TouchWrapper children |
-| VoiceInput.tsx | Not needed — Echo Show has native far-field microphones |
-| Composer text input | EditText, or voice on touch-only devices |
+| Three-panel grid | Container with `direction: "row"`, collapsing to `"column"` on narrow viewports |
+| Conversation transcript | Sequence with `scrollDirection: "vertical"` |
+| Context panel | Container with Text elements, or the AlexaDetail template |
+| Actions log | AlexaTextList |
+| Amber confirmation prompt | Custom Container with two TouchWrapper buttons |
+| Voice input button | Not needed — Echo Show has far-field microphones |
+| Text composer | EditText, or voice on touch-only devices |
 
 ### The confirmation gate on Echo Show
 
-The amber confirmation prompt is the product's most safety-critical
-screen. On Echo Show it renders as a high-contrast APL document with:
+The confirmation screen is the product's most safety-critical UI. On Echo
+Show it renders with:
 
-- Touch targets of 120px height (far above Amazon's 48×48px minimum)
+- 120px-tall touch targets (Amazon's minimum is 48×48px)
 - Text contrast ratios above 4.5:1
-- Every element labelled with accessibilityLabel for VoiceView
-- Voice-only completion: the user can say "yes" or "no" without touching
-- No motion that flashes or blinks, per Amazon accessibility guidance
+- `accessibilityLabel` on every interactive element for VoiceView
+- Voice-only completion — the user can say "yes" or "no" without touching
+- No flashing or blinking motion, per Amazon accessibility guidance
 
-### What's built today vs. specified
+### A visual preview
 
-- **Built:** Web UI (React 19 + Vite 6) — running now
-- **Specified:** APL documents — the mapping above
+A web page rendering the confirmation, context, and briefing screens at
+Echo Show dimensions is available at:
 
-Connecting an Echo Show to the agent requires registering the MCP server
-as an Alexa+ add-on (partner-only access today), then adding APL
-directives to the Alexa skill's response layer. The agent, MCP server,
-and data model do not change — only the rendering layer.
+    /?view=apl                  → confirmation screen
+    /?view=apl&variant=context  → context card
+    /?view=apl&variant=briefing → morning briefing
+
+This is a design preview, not a real APL renderer. It exists so the
+layouts can be reviewed and screenshotted before an Echo Show device is
+available for testing.
+
+### Production path
+
+Connecting an Echo Show requires:
+
+1. Registering the MCP server as an Alexa+ add-on (partner-only access today)
+2. Adding `Alexa.Presentation.APL.RenderDocument` directives to the Alexa
+   skill's response layer
+3. Uploading the APL documents and data sources
+4. Testing on an Echo Show with VoiceView enabled
+
+The agent, MCP server, and data model do not change. The APL client is a
+parallel rendering target, like the web UI.
 
 
 ## 10. What's Real vs. Simulated

@@ -106,6 +106,15 @@ When a field is a date, normalize it to ISO 8601 (YYYY-MM-DD) in the
 array, which is meant for display.
 `.trim();
 
+const today = new Date();
+export const dateHeader =
+  `Today's date is ${today.toISOString().slice(0, 10)} (${today.toLocaleDateString("en-IN", { weekday: "long" })}). ` +
+  `When the source mentions a date without a year, use the current year. ` +
+  `When it says "today", use today's date. When it says "tomorrow", use tomorrow. ` +
+  `Always output dates in ISO 8601 format (YYYY-MM-DD).`;
+
+
+
 /**
  * Converts the model's output into the shape the tool returns.
  * Handles the JSON-string-to-object conversion for `data`.

@@ -13,6 +13,7 @@ import type {
   Turn,
 } from "./types";
 import { playThinkingChime, speak, stopSpeaking } from "./lib/audio";
+import { AplPreview } from "./components/AplPreview";
 const MASK_THRESHOLD_MS = 600;
 const SESSION_KEY = "independence-agent.conversationId";
 const CHATS_KEY = "independence-agent.chats";
@@ -66,7 +67,7 @@ function loadChats(currentId: string): Chat[] {
   ];
 }
 
-export default function App() {
+function MainApp() {
   const [conversationId, setConversationId] = useState(loadConversationId);
   const [chats, setChats] = useState<Chat[]>(() =>
     loadChats(loadConversationId()),
@@ -85,6 +86,8 @@ export default function App() {
   const [view, setView] = useState<View>("home");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const turnsRef = useRef(turns);
+  const [briefing, setBriefing] = useState<string | null>(null);
+  const briefingCheckedRef = useRef(false);
 
   useEffect(() => {
     localStorage.setItem(CHATS_KEY, JSON.stringify(chats));
@@ -104,6 +107,41 @@ export default function App() {
       return [updated, ...existing.filter((item) => item.id !== chatId)];
     });
   }
+
+  useEffect(() => {
+    if (briefingCheckedRef.current) return;
+    briefingCheckedRef.current = true;
+
+    // Only show briefing once per day per browser.
+    const today = new Date().toISOString().slice(0, 10);
+    const key = `briefing.lastShown.${conversationId}`;
+    const lastShown = sessionStorage.getItem(key);
+    if (lastShown === today) return;
+    if (turns.length > 0) return; // user already started talking
+
+    async function load() {
+      try {
+        const res = await fetch("/api/proactive/morning", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          speak: boolean;
+          greeting?: string;
+        };
+        if (data.speak && data.greeting) {
+          setBriefing(data.greeting);
+          sessionStorage.setItem(key, today);
+        }
+      } catch {
+        // Silent — briefing is optional
+      }
+    }
+
+    void load();
+  }, [conversationId, turns.length]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -506,6 +544,19 @@ export default function App() {
               </span>
             </div>
             <div className="workspace-content">
+              {briefing && (
+                <div className="briefing">
+                  <div className="briefing__label">Morning briefing</div>
+                  <div className="briefing__text">{briefing}</div>
+                  <button
+                    type="button"
+                    className="briefing__dismiss"
+                    onClick={() => setBriefing(null)}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
               {(view === "home" || view === "tasks" || view === "history") && (
                 <div className="content-column">
                   <div className="content-subhead">
@@ -568,4 +619,16 @@ export default function App() {
       </footer>
     </div>
   );
+}
+
+export default function App() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("view") === "apl") {
+    const variant =
+      (params.get("variant") as "confirmation" | "context" | "briefing") ??
+      "confirmation";
+    return <AplPreview variant={variant} />;
+  }
+
+  return <MainApp />;
 }
