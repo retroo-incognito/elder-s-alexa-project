@@ -292,3 +292,18 @@ export const ListRecentContextsOutput = z.object({
     }),
   ),
 });
+
+export const ListMissedRemindersInput = z.object({
+  userId: z.string(),
+});
+
+export const ListMissedRemindersOutput = z.object({
+  missed: z.array(
+    z.object({
+      reminderId: z.string(),
+      title: z.string(),
+      scheduledAt: z.string(),
+      daysOverdue: z.number(),
+    }),
+  ),
+});

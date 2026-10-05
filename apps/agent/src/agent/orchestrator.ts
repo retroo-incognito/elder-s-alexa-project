@@ -75,7 +75,7 @@ async function handleQuarantineResponse(
     };
   }
 
-   // If we're inside a contact clarification, resolve it first.
+  // If we're inside a contact clarification, resolve it first.
   if (state.pendingContactClarification) {
     const picked = matchContactByMessage(
       message,
@@ -84,20 +84,20 @@ async function handleQuarantineResponse(
     if (picked) {
       state.pendingContactClarification = null;
       // Re-resolve to get the full record.
-      const full = await callTool<ResolveContactResult>('resolve_contact', {
+      const full = await callTool<ResolveContactResult>("resolve_contact", {
         userId: state.userId,
         reference: picked.relationship,
       });
       return draftQuarantineSummary(
         state,
-        full.contact ?? { ...picked, address: '' },
+        full.contact ?? { ...picked, address: "" },
         pending,
       );
     }
     // Still no match, re-ask.
     const names = state.pendingContactClarification.suggestions
       .map((s) => `${s.displayName} (${s.relationship})`)
-      .join(', ');
+      .join(", ");
     return {
       reply: `I didn't catch that. Your contacts are: ${names}. Which one?`,
       conversationId: state.conversationId,
@@ -290,7 +290,7 @@ export async function handleMessage(input: AgentInput): Promise<AgentOutput> {
   // Quarantine takes precedence over everything else.
   if (state.pendingQuarantineEscalation) {
     const output = await handleQuarantineResponse(state, input.message);
-    recordTurn(state, 'agent', output.reply);
+    recordTurn(state, "agent", output.reply);
     return output;
   }
 
@@ -331,6 +331,9 @@ export async function handleMessage(input: AgentInput): Promise<AgentOutput> {
     case "LIST_REMINDERS":
       output = await handleListReminders(state);
       break;
+    case "MISSED_REMINDERS":
+      output = await handleMissedReminders(state);
+      break;
     default:
       output = await handleUnknown(state, input.message);
       break;
@@ -343,6 +346,51 @@ export async function handleMessage(input: AgentInput): Promise<AgentOutput> {
 // ─────────────────────────────────────────────────────────────
 // Intent handlers
 // ─────────────────────────────────────────────────────────────
+async function handleMissedReminders(
+  state: ConversationState,
+): Promise<AgentOutput> {
+  const result = await callTool<{
+    missed: Array<{
+      reminderId: string;
+      title: string;
+      scheduledAt: string;
+      daysOverdue: number;
+    }>;
+  }>("list_missed_reminders", { userId: state.userId });
+
+  if (result.missed.length === 0) {
+    return {
+      reply: "You haven't missed anything.",
+      conversationId: state.conversationId,
+      context: state.activeContext,
+      actions: [],
+      pendingConfirmation: null,
+    };
+  }
+
+  const lines = result.missed
+    .slice(0, 5)
+    .map((r) => {
+      const when =
+        r.daysOverdue === 0
+          ? "earlier today"
+          : r.daysOverdue === 1
+            ? "yesterday"
+            : `${r.daysOverdue} days ago`;
+      return `${r.title} (${when})`;
+    })
+    .join("; ");
+
+  return {
+    reply: `You missed ${result.missed.length} reminder${
+      result.missed.length === 1 ? "" : "s"
+    }: ${lines}.`,
+    conversationId: state.conversationId,
+    context: state.activeContext,
+    actions: [],
+    pendingConfirmation: null,
+  };
+};
 
 async function handleUnderstand(
   state: ConversationState,

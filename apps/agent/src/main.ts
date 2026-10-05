@@ -127,11 +127,18 @@ app.post("/api/proactive/morning", async (req, res) => {
     }
 
     const items: string[] = [];
+    const seenReminderTitles = new Set<string>();
 
     // ── Reminders due today or tomorrow ──────────────────────
     for (const r of reminders.reminders) {
       const bucket = classifyDate(r.scheduledAt);
+      // Only today or tomorrow — missed reminders are handled separately.
       if (bucket !== "today" && bucket !== "tomorrow") continue;
+
+      const dedupeKey = `${bucket}::${r.title.toLowerCase().trim()}`;
+      if (seenReminderTitles.has(dedupeKey)) continue;
+      seenReminderTitles.add(dedupeKey);
+
       items.push(
         bucket === "today"
           ? `A reminder today: ${r.title}`

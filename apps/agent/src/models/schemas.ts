@@ -72,6 +72,7 @@ export type Intent =
   | 'DENY_SEND'
   | 'RETRIEVE_CONTEXT'
   | 'LIST_REMINDERS'
+  | 'MISSED_REMINDERS'
   | 'UNKNOWN';
 
 export interface Plan {

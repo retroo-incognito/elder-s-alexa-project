@@ -16,6 +16,7 @@ const TOOL_LEVELS: Record<string, SafetyLevel> = {
   send_family_message: SafetyLevel.EXTERNAL_COMMS,
   resolve_contact: SafetyLevel.READ,
   list_recent_contexts: SafetyLevel.READ,
+  list_missed_reminders: SafetyLevel.READ,
 };
 
 export function getSafetyLevel(toolName: string): SafetyLevel {

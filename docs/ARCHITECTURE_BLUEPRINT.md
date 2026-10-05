@@ -1406,4 +1406,25 @@ parallel rendering target, like the web UI.
 
 ---
 
+### Reminder Lifecycle
+
+Reminders deduplicate on `(userId, relatedContextId)`. If a user asks
+for a reminder about the same context twice, the second request updates
+the existing reminder's scheduled time rather than creating a new row.
+
+Reminders have three states:
+- `active` — scheduled for the future, will fire
+- `completed` — the user acknowledged it
+- `cancelled` — the user cancelled it
+
+A reminder whose `scheduledAt` is in the past but still in `active`
+status is a "missed reminder." It is excluded from the morning briefing
+and shown separately via the `list_missed_reminders` tool when the user
+asks "what did I miss?"
+
+Reminders completed or cancelled more than 90 days ago are removed by
+DynamoDB TTL. No manual cleanup is required.
+
+---
+
 *Authored for the Amazon Developer Hackathon 2026 — Alexa+ Track.*

@@ -44,4 +44,6 @@ Return ONLY valid JSON, no markdown fences, with these fields:
 - "reasoning": a one-sentence explanation
 - "extractedReference": if the user refers to something ("that bill",
   "the appointment"), extract the noun phrase; otherwise null.
+- MISSED_REMINDERS: The user asks what they forgot or missed
+(for example "What did I miss?", "Did I forget anything?", "What did I forget?").
 `.trim();
