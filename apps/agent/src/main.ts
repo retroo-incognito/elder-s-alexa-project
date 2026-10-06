@@ -6,6 +6,9 @@ import { handleMessage } from "./agent/orchestrator.js";
 import { logger } from "./lib/logger.js";
 import { callTool, disconnect } from "./lib/mcp-client.js";
 import type { AgentInput } from "./models/schemas.js";
+import { startScheduler } from "./lib/scheduler.js";
+
+startScheduler();
 
 const app = express();
 app.use(cors());
@@ -197,6 +200,41 @@ app.post("/api/proactive/morning", async (req, res) => {
     res.status(500).json({ error: "Could not generate briefing" });
   }
 });
+
+app.get("/api/notifications", async (_req, res) => {
+  try {
+    const result = await callTool<{
+      reminders: Array<{
+        reminderId: string;
+        title: string;
+        scheduledAt: string;
+        firedAt: string;
+      }>;
+    }>("find_fired_reminders", { userId: config.AGENT_USER_ID });
+    res.json({ notifications: result.reminders });
+  } catch (err) {
+    logger.error("Notification fetch failed", {
+      error: (err as Error).message,
+    });
+    res.status(500).json({ error: "Could not load notifications" });
+  }
+});
+
+app.post("/api/notifications/acknowledge/:reminderId", async (req, res) => {
+  try {
+    await callTool("complete_reminder", {
+      userId: config.AGENT_USER_ID,
+      reminderId: req.params.reminderId,
+    });
+    res.json({ success: true });
+  } catch (err) {
+    logger.error("Acknowledge failed", {
+      error: (err as Error).message,
+    });
+    res.status(500).json({ error: "Could not acknowledge" });
+  }
+});
+
 const server = app.listen(config.AGENT_HTTP_PORT, () => {
   logger.info(`Agent listening on http://localhost:${config.AGENT_HTTP_PORT}`);
   logger.info(`MCP server: ${config.MCP_SERVER_URL}`);

@@ -9,7 +9,7 @@ const TOOL_LEVELS: Record<string, SafetyLevel> = {
   analyze_message: SafetyLevel.READ,
   get_context: SafetyLevel.READ,
   get_reminders: SafetyLevel.READ,
-  scan_threat: SafetyLevel.READ,  
+  scan_threat: SafetyLevel.READ,
   save_context: SafetyLevel.LOW_RISK,
   create_reminder: SafetyLevel.LOW_RISK,
   draft_family_message: SafetyLevel.LOW_RISK,
@@ -17,6 +17,9 @@ const TOOL_LEVELS: Record<string, SafetyLevel> = {
   resolve_contact: SafetyLevel.READ,
   list_recent_contexts: SafetyLevel.READ,
   list_missed_reminders: SafetyLevel.READ,
+  mark_reminder_fired: SafetyLevel.LOW_RISK,
+  complete_reminder: SafetyLevel.LOW_RISK,
+  find_fired_reminders: SafetyLevel.READ,
 };
 
 export function getSafetyLevel(toolName: string): SafetyLevel {

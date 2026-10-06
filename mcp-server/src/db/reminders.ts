@@ -155,3 +155,58 @@ export async function findMissedReminders(
   );
   return (result.Items ?? []) as ReminderRecord[];
 }
+
+export async function markReminderFired(
+  userId: UserId,
+  reminderId: string,
+  firedAt: string,
+): Promise<void> {
+  await ddb.send(
+    new UpdateCommand({
+      TableName: TABLE,
+      Key: { userId, reminderId },
+      UpdateExpression: 'SET firedAt = :f',
+      ConditionExpression: 'attribute_not_exists(firedAt)',
+      ExpressionAttributeValues: { ':f': firedAt },
+    }),
+  );
+}
+
+export async function completeReminder(
+  userId: UserId,
+  reminderId: string,
+): Promise<void> {
+  await ddb.send(
+    new UpdateCommand({
+      TableName: TABLE,
+      Key: { userId, reminderId },
+      UpdateExpression: 'SET #s = :s, completedAt = :now',
+      ConditionExpression: '#s = :active',
+      ExpressionAttributeNames: { '#s': 'status' },
+      ExpressionAttributeValues: {
+        ':s': 'completed',
+        ':active': 'active',
+        ':now': new Date().toISOString(),
+      },
+    }),
+  );
+}
+
+export async function findFiredReminders(
+  userId: UserId,
+): Promise<ReminderRecord[]> {
+  const result = await ddb.send(
+    new QueryCommand({
+      TableName: TABLE,
+      IndexName: 'StatusIndex',
+      KeyConditionExpression: 'userId = :u AND #s = :s',
+      FilterExpression: 'attribute_exists(firedAt)',
+      ExpressionAttributeNames: { '#s': 'status' },
+      ExpressionAttributeValues: {
+        ':u': userId,
+        ':s': 'active',
+      },
+    }),
+  );
+  return (result.Items ?? []) as ReminderRecord[];
+}

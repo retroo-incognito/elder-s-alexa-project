@@ -88,6 +88,9 @@ function MainApp() {
   const turnsRef = useRef(turns);
   const [briefing, setBriefing] = useState<string | null>(null);
   const briefingCheckedRef = useRef(false);
+  const [notifications, setNotifications] = useState<
+    Array<{ reminderId: string; title: string; firedAt: string }>
+  >([]);
 
   useEffect(() => {
     localStorage.setItem(CHATS_KEY, JSON.stringify(chats));
@@ -107,6 +110,34 @@ function MainApp() {
       return [updated, ...existing.filter((item) => item.id !== chatId)];
     });
   }
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function poll() {
+      try {
+        const res = await fetch("/api/notifications");
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          notifications: Array<{
+            reminderId: string;
+            title: string;
+            firedAt: string;
+          }>;
+        };
+        if (!cancelled) setNotifications(data.notifications);
+      } catch {
+        // Silent — polling should never break the UI
+      }
+    }
+
+    void poll();
+    const id = window.setInterval(poll, 10_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
 
   useEffect(() => {
     if (briefingCheckedRef.current) return;
@@ -520,7 +551,29 @@ function MainApp() {
               </div>
             )}
           </section>
-
+          {notifications.map((n) => (
+            <div key={n.reminderId} className="notification">
+              <div className="notification__label">Reminder</div>
+              <div className="notification__text">{n.title}</div>
+              <button
+                type="button"
+                className="notification__ack"
+                onClick={async () => {
+                  await fetch(
+                    `/api/notifications/acknowledge/${n.reminderId}`,
+                    {
+                      method: "POST",
+                    },
+                  );
+                  setNotifications((prev) =>
+                    prev.filter((x) => x.reminderId !== n.reminderId),
+                  );
+                }}
+              >
+                Done
+              </button>
+            </div>
+          ))}
           <section className="output-section" aria-live="polite">
             <div className="section-heading output-heading">
               <div>

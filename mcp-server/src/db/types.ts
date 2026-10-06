@@ -95,3 +95,14 @@ export interface ContactRecord {
   createdAt: string;
 }
 
+export interface ReminderRecord {
+  userId: UserId;
+  reminderId: string;
+  title: string;
+  scheduledAt: string;
+  status: ReminderStatus;
+  relatedContextId?: string;
+  createdAt: string;
+  firedAt?: string;
+  completedAt?: string;
+}

@@ -307,3 +307,38 @@ export const ListMissedRemindersOutput = z.object({
     }),
   ),
 });
+
+export const MarkReminderFiredInput = z.object({
+  userId: z.string(),
+  reminderId: z.string(),
+  firedAt: z.string(),
+});
+
+export const MarkReminderFiredOutput = z.object({
+  success: z.boolean(),
+});
+
+export const CompleteReminderInput = z.object({
+  userId: z.string(),
+  reminderId: z.string(),
+});
+
+export const CompleteReminderOutput = z.object({
+  success: z.boolean(),
+});
+
+export const FindFiredRemindersInput = z.object({
+  userId: z.string(),
+});
+
+export const FindFiredRemindersOutput = z.object({
+  reminders: z.array(
+    z.object({
+      reminderId: z.string(),
+      title: z.string(),
+      scheduledAt: z.string(),
+      firedAt: z.string(),
+      relatedContextId: z.string().optional(),
+    }),
+  ),
+});
