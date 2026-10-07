@@ -21,7 +21,7 @@ export class ReminderStack extends cdk.Stack {
     // Subscribe an email for the demo. In production, add
     // per-user subscriptions via mobile push platform endpoints.
     topic.addSubscription(
-      new snsSubs.EmailSubscription('you@example.com'),
+      new snsSubs.EmailSubscription('surajrajput733@gmail.com'),
     );
 
     // ── Reference the existing reminders table ─────────────

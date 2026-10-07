@@ -60,6 +60,22 @@ function getOrCreateState(
   return created;
 }
 
+/**
+ * Produces a safe version of a flagged message for forwarding:
+ * strips URLs, emails, and phone numbers. Used by the quarantine
+ * flow so we never forward a message containing the malicious link.
+ */
+function sanitizeForForwarding(content: string): string {
+  return content
+    .replace(/https?:\/\/\S+/gi, '[link removed]')
+    .replace(/\bwww\.\S+/gi, '[link removed]')
+    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '[email removed]')
+    .replace(/\+?\d[\d\s\-()]{7,}\d/g, '[number removed]')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 280);
+}
+
 async function handleQuarantineResponse(
   state: ConversationState,
   message: string,
@@ -502,16 +518,6 @@ async function handleUnderstand(
     const categoryList = Array.from(
       new Set(threat.signals.map((s) => s.category.replace(/-/g, " "))),
     ).join(", ");
-
-    // Sanitize the content so it's safe to forward.
-    const { sanitizeForForwarding } =
-      await import("../../../../mcp-server/src/lib/threat-scan.js").catch(
-        () => ({
-          sanitizeForForwarding: (c: string) =>
-            c.replace(/https?:\/\/\S+/gi, "[link removed]").slice(0, 280),
-        }),
-      );
-
     const sanitized = sanitizeForForwarding(userMessage);
 
     state.pendingQuarantineEscalation = {
