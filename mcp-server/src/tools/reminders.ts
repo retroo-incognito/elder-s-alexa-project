@@ -15,6 +15,8 @@ import {
 } from "../schemas/tool-schemas.js";
 import * as reminders from "../db/reminders.js";
 import type { ReminderStatus } from "../db/types.js";
+import { createReminderSchedule } from "../lib/scheduler-client.js";
+import { config } from '../config.js';
 
 export function registerReminderTools(server: McpServer): void {
   server.registerTool(
@@ -35,6 +37,23 @@ export function registerReminderTools(server: McpServer): void {
         scheduledAt,
         relatedContextId,
       });
+
+      // Register a one-time EventBridge schedule if the stack is deployed.
+      // Skipped silently when the ARNs aren't configured (local dev).
+      if (config.REMINDER_HANDLER_ARN && config.SCHEDULER_ROLE_ARN) {
+        try {
+          await createReminderSchedule({
+            reminderId: record.reminderId,
+            userId,
+            title,
+            scheduledAt,
+          });
+        } catch (err) {
+          console.error("Failed to schedule reminder:", (err as Error).message);
+          // Do not fail the tool call — the reminder is saved.
+        }
+      }
+
       const result = { reminderId: record.reminderId, success: true };
       return {
         content: [{ type: "text", text: JSON.stringify(result) }],
@@ -104,69 +123,70 @@ export function registerReminderTools(server: McpServer): void {
   );
 
   server.registerTool(
-  'mark_reminder_fired',
-  {
-    title: 'Mark Reminder Fired',
-    description: 'Internal — called by the scheduler when a reminder is due.',
-    inputSchema: MarkReminderFiredInput,
-    outputSchema: MarkReminderFiredOutput,
-  },
-  async ({ userId, reminderId, firedAt }) => {
-    try {
-      await reminders.markReminderFired(userId, reminderId, firedAt);
-    } catch {
-      // Already fired — fine.
-    }
-    const result = { success: true };
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result) }],
-      structuredContent: result,
-    };
-  },
-);
+    "mark_reminder_fired",
+    {
+      title: "Mark Reminder Fired",
+      description: "Internal — called by the scheduler when a reminder is due.",
+      inputSchema: MarkReminderFiredInput,
+      outputSchema: MarkReminderFiredOutput,
+    },
+    async ({ userId, reminderId, firedAt }) => {
+      try {
+        await reminders.markReminderFired(userId, reminderId, firedAt);
+      } catch {
+        // Already fired — fine.
+      }
+      const result = { success: true };
+      return {
+        content: [{ type: "text", text: JSON.stringify(result) }],
+        structuredContent: result,
+      };
+    },
+  );
 
-server.registerTool(
-  'complete_reminder',
-  {
-    title: 'Complete Reminder',
-    description: 'Mark a reminder as completed after the user acknowledges it.',
-    inputSchema: CompleteReminderInput,
-    outputSchema: CompleteReminderOutput,
-  },
-  async ({ userId, reminderId }) => {
-    await reminders.completeReminder(userId, reminderId);
-    const result = { success: true };
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result) }],
-      structuredContent: result,
-    };
-  },
-);
+  server.registerTool(
+    "complete_reminder",
+    {
+      title: "Complete Reminder",
+      description:
+        "Mark a reminder as completed after the user acknowledges it.",
+      inputSchema: CompleteReminderInput,
+      outputSchema: CompleteReminderOutput,
+    },
+    async ({ userId, reminderId }) => {
+      await reminders.completeReminder(userId, reminderId);
+      const result = { success: true };
+      return {
+        content: [{ type: "text", text: JSON.stringify(result) }],
+        structuredContent: result,
+      };
+    },
+  );
 
-server.registerTool(
-  'find_fired_reminders',
-  {
-    title: 'Find Fired Reminders',
-    description:
-      'List reminders that have fired but not been acknowledged. Used by the notification feed.',
-    inputSchema: FindFiredRemindersInput,
-    outputSchema: FindFiredRemindersOutput,
-  },
-  async ({ userId }) => {
-    const records = await reminders.findFiredReminders(userId);
-    const result = {
-      reminders: records.map((r) => ({
-        reminderId: r.reminderId,
-        title: r.title,
-        scheduledAt: r.scheduledAt,
-        firedAt: r.firedAt!,
-        relatedContextId: r.relatedContextId,
-      })),
-    };
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result) }],
-      structuredContent: result,
-    };
-  },
-);
+  server.registerTool(
+    "find_fired_reminders",
+    {
+      title: "Find Fired Reminders",
+      description:
+        "List reminders that have fired but not been acknowledged. Used by the notification feed.",
+      inputSchema: FindFiredRemindersInput,
+      outputSchema: FindFiredRemindersOutput,
+    },
+    async ({ userId }) => {
+      const records = await reminders.findFiredReminders(userId);
+      const result = {
+        reminders: records.map((r) => ({
+          reminderId: r.reminderId,
+          title: r.title,
+          scheduledAt: r.scheduledAt,
+          firedAt: r.firedAt!,
+          relatedContextId: r.relatedContextId,
+        })),
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(result) }],
+        structuredContent: result,
+      };
+    },
+  );
 }
