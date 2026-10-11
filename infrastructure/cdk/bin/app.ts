@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import * as cdk from 'aws-cdk-lib';
-import { ReminderStack } from '../lib/reminder-stack';
+import { ReminderStack } from '../lib/reminder-stack.js';
 
 const app = new cdk.App();
 

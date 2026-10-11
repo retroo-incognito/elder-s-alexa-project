@@ -67,11 +67,11 @@ function getOrCreateState(
  */
 function sanitizeForForwarding(content: string): string {
   return content
-    .replace(/https?:\/\/\S+/gi, '[link removed]')
-    .replace(/\bwww\.\S+/gi, '[link removed]')
-    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '[email removed]')
-    .replace(/\+?\d[\d\s\-()]{7,}\d/g, '[number removed]')
-    .replace(/\s+/g, ' ')
+    .replace(/https?:\/\/\S+/gi, "[link removed]")
+    .replace(/\bwww\.\S+/gi, "[link removed]")
+    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "[email removed]")
+    .replace(/\+?\d[\d\s\-()]{7,}\d/g, "[number removed]")
+    .replace(/\s+/g, " ")
     .trim()
     .slice(0, 280);
 }
@@ -406,7 +406,7 @@ async function handleMissedReminders(
     actions: [],
     pendingConfirmation: null,
   };
-};
+}
 
 async function handleUnderstand(
   state: ConversationState,
@@ -1223,6 +1223,28 @@ function parseReminderDate(
   message: string,
   context: ContextMatch | null,
 ): string {
+  // Match "at 6:56 PM" or "at 18:56" or "at 6 PM"
+  const timeMatch = message.match(
+    /\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i,
+  );
+  if (timeMatch) {
+    const hours = Number(timeMatch[1]);
+    const minutes = timeMatch[2] ? Number(timeMatch[2]) : 0;
+    const meridiem = timeMatch[3]?.toLowerCase();
+
+    let hour24 = hours;
+    if (meridiem === "pm" && hours !== 12) hour24 = hours + 12;
+    if (meridiem === "am" && hours === 12) hour24 = 0;
+
+    const candidate = new Date();
+    candidate.setHours(hour24, minutes, 0, 0);
+    // If the time has already passed today, use tomorrow.
+    if (candidate.getTime() <= Date.now()) {
+      candidate.setDate(candidate.getDate() + 1);
+    }
+    return candidate.toISOString();
+  }
+  
   const contextDate = findContextDate(context);
 
   // ── 1. "N days before" (or "N days before the due date") ─────────

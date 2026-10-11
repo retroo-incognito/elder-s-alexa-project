@@ -1,10 +1,17 @@
 {
   "name": "reminder-handler",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc"
+  },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.600.0",
-    "@aws-sdk/client-sns": "^3.600.0",
-    "@aws-sdk/lib-dynamodb": "^3.600.0"
+    "@aws-sdk/client-dynamodb": "^3.1147.0",
+    "@aws-sdk/client-sns": "^3.1147.0",
+    "@aws-sdk/lib-dynamodb": "^3.1147.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "@types/node": "^20.14.0"
   }
 }

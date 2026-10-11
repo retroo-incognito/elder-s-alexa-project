@@ -4,14 +4,15 @@
   "private": true,
   "scripts": {
     "build": "tsc",
-    "deploy": "cdk deploy",
-    "synth": "cdk synth"
+    "build:lambda": "cd lambda/reminder-handler && npm install && npm run build && cp package.json dist/ && cp -r node_modules dist/node_modules",
+    "deploy": "npm run build:lambda && cdk deploy",
+    "synth": "npm run build:lambda && cdk synth"
   },
   "devDependencies": {
-    "aws-cdk": "^2.140.0",
-    "aws-cdk-lib": "^2.140.0",
-    "constructs": "^10.3.0",
-    "typescript": "^5.5.0",
+    "aws-cdk": "^2.1144.0",
+    "aws-cdk-lib": "^2.272.0",
+    "constructs": "^10.4.0",
+    "typescript": "^5.9.0",
     "@types/node": "^20.14.0"
   }
 }
