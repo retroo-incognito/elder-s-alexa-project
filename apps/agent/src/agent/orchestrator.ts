@@ -1223,6 +1223,23 @@ function parseReminderDate(
   message: string,
   context: ContextMatch | null,
 ): string {
+  // Match "in 2 minutes", "in 30 seconds", "in 1 hour"
+  const relativeMatch = message.match(
+    /\bin\s+(\d+)\s+(second|minute|min|hour|hr)s?\b/i,
+  );
+  if (relativeMatch) {
+    const value = Number(relativeMatch[1]);
+    const unit = relativeMatch[2].toLowerCase();
+
+    const offsetMs = unit.startsWith("sec")
+      ? value * 1000
+      : unit.startsWith("min")
+        ? value * 60 * 1000
+        : value * 60 * 60 * 1000; // hour
+
+    return new Date(Date.now() + offsetMs).toISOString();
+  }
+
   // Match "at 6:56 PM" or "at 18:56" or "at 6 PM"
   const timeMatch = message.match(
     /\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i,
@@ -1244,7 +1261,7 @@ function parseReminderDate(
     }
     return candidate.toISOString();
   }
-  
+
   const contextDate = findContextDate(context);
 
   // ── 1. "N days before" (or "N days before the due date") ─────────
