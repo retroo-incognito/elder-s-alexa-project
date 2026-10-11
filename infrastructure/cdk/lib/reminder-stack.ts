@@ -36,7 +36,7 @@ export class ReminderStack extends cdk.Stack {
       runtime: lambda.Runtime.NODEJS_20_X,
       handler: "index.handler",
       code: lambda.Code.fromAsset(
-        path.join(__dirname, "../lambda/reminder-handler/dist"),
+        path.join(process.cwd(), "lambda/reminder-handler/dist"),
       ),
       timeout: cdk.Duration.seconds(10),
       environment: {

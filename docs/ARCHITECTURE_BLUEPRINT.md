@@ -1427,4 +1427,47 @@ DynamoDB TTL. No manual cleanup is required.
 
 ---
 
+---
+## Multi-User Extension
+
+The current build is single-user. `AGENT_USER_ID` is a fixed value
+(`demo-user`) and reminder delivery routes through one shared SNS topic
+with one manually confirmed email subscription.
+
+For a production multi-user deployment, three changes are required:
+
+### 1. User-owned delivery preferences
+
+Each user record stores `email`, `phone`, `preferredChannel`, and
+verification flags. The reminder Lambda reads the user's profile and
+routes delivery based on their choice. No per-user SNS subscription
+is required.
+
+### 2. Amazon SES replaces SNS for email
+
+SNS requires a per-recipient confirmation click, which is a poor
+experience for a product. SES sends to any verified recipient without
+a per-user subscription step. The sending domain is verified once.
+
+SNS remains the right choice for SMS delivery (`Publish` with the
+`SMS` protocol) and for internal fanout to Lambda or SQS.
+
+### 3. Email verification
+
+A one-time verification flow (send code → user enters code → flag flips
+to `verified`) confirms ownership before reminders start. This is a
+per-user setup step, not a per-reminder one.
+
+### What doesn't change
+
+- EventBridge Scheduler registration: unchanged
+- Reminder records and DynamoDB schema: unchanged
+- MCP tools and the agent pipeline: unchanged
+- The safety model: unchanged
+
+Only the delivery layer changes. The scheduling and safety
+infrastructure is already multi-user ready — `userId` is part of every
+DynamoDB key.
+---
+
 *Authored for the Amazon Developer Hackathon 2026 — Alexa+ Track.*
