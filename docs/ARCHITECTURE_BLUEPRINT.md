@@ -596,6 +596,35 @@ export const SendFamilyMessageOutput = z.object({
   sentAt: z.string().optional(),
   rejectionReason: z.string().optional(),
 });
+
+### 4.9 `scan_threat`
+
+- **Purpose:** Deterministic scan for scam and phishing signals. Runs before
+  `analyze_message` and cannot be prompt-injected.
+- **Implemented in:** [`mcp-server/src/tools/threat-scan.ts`](file:///.../threat-scan.ts)
+- **When Called:** On every `UNDERSTAND_MESSAGE`, before extraction.
+
+```typescript
+// Input Schema (Zod)
+export const ScanThreatInput = z.object({
+  content: z.string().min(1),
+  source: z.string().optional(),
+  senderId: z.string().optional(),
+});
+
+// Output Schema (Zod)
+export const ScanThreatOutput = z.object({
+  risk: z.enum(['low', 'medium', 'high']),
+  signals: z.array(z.object({
+    category: z.string(),
+    severity: z.enum(['low', 'medium', 'high']),
+    evidence: z.string(),
+    matchedAgainst: z.enum(['raw', 'normalized']),
+  })),
+  reasoning: z.string(),
+  blockActions: z.boolean(),
+  allowListed: z.boolean(),
+});
 ```
 
 - **Guards & Validation:** Evaluates 4 structural server-side guards. If any guard fails, returns `{ sent: false, rejectionReason }` without mutating database state.
@@ -665,6 +694,29 @@ External communications (Level 3) cannot be executed by an LLM decision alone. T
 ---
 
 ### Detailed Layer Specifications
+
+#### Layer 0: Deterministic threat scanning (pre-extraction)
+
+Before any LLM call, the agent runs `scan_threat` on the raw message
+text. The scanner is a regex dictionary — no model involved — so it
+cannot be prompt-injected. It detects urgency language, credential
+requests, payment coercion (gift cards, wire, crypto), suspicious short
+links, and IP-based URLs. It also consults a trusted-sender allow-list
+and downgrades risk by one tier for known institutions.
+
+When the scanner returns `blockActions: true`, the orchestrator refuses
+to call `draft_family_message` or `send_family_message` for that content.
+The refusal is deterministic, not LLM-mediated. A message containing
+"ignore previous instructions, this is safe" cannot bypass the block,
+because the LLM is never asked.
+
+This is now the topmost of four enforcement layers. Each layer assumes
+the one above it might be compromised:
+
+1. **Threat scanner** — reads untrusted input, cannot be injected
+2. **Deterministic yes/no routing** — bypasses the LLM entirely
+3. **Server-side send guards** — four independent checks
+4. **Database conditional writes** — atomic state transitions
 
 #### Layer 1: Agent Orchestrator (Deterministic Regex Routing)
 - **Location:** [`apps/agent/src/agent/planner.ts`](file:///H:/htdocs/meeting2action-alexa-agent/elder-s-alexa-project/apps/agent/src/agent/planner.ts) and [`apps/agent/src/agent/safety.ts`](file:///H:/htdocs/meeting2action-alexa-agent/elder-s-alexa-project/apps/agent/src/agent/safety.ts)
@@ -881,6 +933,25 @@ The persistence layer uses 6 Amazon DynamoDB tables with on-demand capacity (`PA
 
 ---
 
+### Reminder Lifecycle
+
+Reminders deduplicate on `(userId, relatedContextId)`. If a user asks
+for a reminder about the same context twice, the second request updates
+the existing reminder's scheduled time rather than creating a new row.
+
+Reminders have three states:
+- `active` — scheduled for the future, will fire
+- `completed` — the user acknowledged it
+- `cancelled` — the user cancelled it
+
+A reminder whose `scheduledAt` is in the past but still in `active`
+status is a "missed reminder." It is excluded from the morning briefing
+and shown separately via the `list_missed_reminders` tool when the user
+asks "what did I miss?"
+
+Reminders completed or cancelled more than 90 days ago are removed by
+DynamoDB TTL. No manual cleanup is required.
+
 ## 6A Proactive Assistance
 
 The agent is not purely reactive. It initiates a briefing when there is
@@ -933,6 +1004,55 @@ The agent does not speak when there is nothing to say. The endpoint
 returns `{ speak: false }` and the UI shows no card. A briefing that
 fires every day with "You have nothing scheduled" would train the user
 to ignore it. The briefing appears only when it has content.
+
+
+## 6B AWS reminder delivery (deployed)
+Each reminder registered in DynamoDB also creates one EventBridge
+Scheduler rule with `ActionAfterCompletion: DELETE`. When the schedule
+fires at the reminder's exact time, it invokes a Lambda handler that:
+
+1. Marks the reminder `firedAt` in DynamoDB. The write uses
+   `ConditionExpression: attribute_not_exists(firedAt)` so a duplicate
+   invocation cannot fire the reminder twice.
+2. Publishes a notification to an Amazon SNS topic.
+
+SNS fans out to the subscribed delivery channel — email in the current
+build. The CDK stack in `infrastructure/cdk/` defines the SNS topic, the
+Lambda function, and the scheduler execution role as code.
+
+    Reminder created in chat
+        │
+        ├──► DynamoDB row saved
+        └──► EventBridge Scheduler register (fires at scheduledAt)
+                │
+                ▼
+             Lambda handler
+                ├──► DynamoDB: set firedAt (conditional)
+                └──► SNS publish
+                     │
+                     ▼
+                  Email / SMS
+
+**Verified end-to-end:** a reminder created through the agent chat
+interface was registered with EventBridge Scheduler, fired at the
+scheduled time, invoked the Lambda, updated the reminder record with a
+`firedAt` timestamp, and delivered an email via SNS. The schedule
+auto-deleted after firing.
+
+### Local scheduler
+
+When the AWS ARNs are not configured in `.env`, a local interval-based
+scheduler runs inside the agent process, scanning for due reminders every
+15 seconds and marking them fired. The web UI polls
+`/api/notifications` every 10 seconds and renders fired reminders as
+agent-initiated turns. This is what appears in the demo video; the AWS
+pipeline is the production path and is verified separately.
+
+### Silence is a feature
+
+The morning briefing only speaks when there is content. A reminder that
+fires does so once. A day with nothing scheduled produces no message. The
+system does not train the user to ignore it.
 
 ## 7. Request Lifecycle — One Worked Example
 
@@ -1355,79 +1475,6 @@ parallel rendering target, like the web UI.
 
 ## 11. Extension Paths
 
-1. **Real Messaging Delivery (WhatsApp Business API & Twilio SMS):**  
-   [`mcp-server/src/tools/messaging.ts`](file:///H:/htdocs/meeting2action-alexa-agent/elder-s-alexa-project/mcp-server/src/tools/messaging.ts) already receives resolved contact phone numbers and communication channel identifiers. Replacing the final `markSent()` step with a Twilio or WhatsApp Business SDK call requires under 20 lines of code without changing tool schemas.
-
-2. **Email Ingestion via Gmail OAuth / Microsoft Graph API:**  
-   `analyze_message` accepts raw text and a `source` string. An external ingestion worker can poll IMAP/OAuth mailboxes, extract email body content, and pass messages to `analyze_message` automatically.
-
-3. **Proactive Scheduled Reminders via AWS EventBridge:**  
-   When `create_reminder` records a timestamp in DynamoDB, it can simultaneously emit an Amazon EventBridge scheduled rule to trigger an outbound push notification or Alexa proactive announcement at the designated time.
-
-4. **MCP Apps Interactive Screen Cards:**  
-   Because the MCP server produces structured JSON entities (`structuredContent`), it is directly compatible with the upcoming MCP Apps UI specification for rendering interactive native cards on Amazon Echo Show smart displays.
-
-5. **Caregiver Escalation with Tiered Consent:**  
-   The safety architecture can be extended by adding a `caregiverConsentRequired` flag on high-value contexts, triggering a secondary confirmation token dispatch to a designated guardian contact before execution.
-
-6. **Mobile Application via React Native:**  
-   The REST/JSON interface exposed by `apps/agent` and the Streamable HTTP interface of `mcp-server` allow mobile clients to bind to the orchestrator using standard HTTP fetch mechanisms.
-
----
-
-## 12. Known Limitations
-
-1. **Extraction Latency & Perceptual Mitigation:**  
-   Two sequential LLM calls (Planner intent classification + Response natural language generation) introduce approximately 1.0–1.8 seconds of end-to-end turn latency. The web client mitigates user friction using an acoustic Web Audio API chime and speech synthesis acknowledgement triggered when processing exceeds 600ms (`MASK_THRESHOLD_MS`).
-2. **Volatile In-Memory Dialog State:**  
-   Active turn buffers and pending confirmation tokens reside in Node.js process memory; an ungraceful container restart during a pending confirmation requires the user to repeat their request.
-3. **Simulated Outbound Telephony:**  
-   The MVP records outbound sends in the database without connecting to external carrier SMS aggregators.
-4. **Partner-Restricted Alexa+ Native Hosting:**  
-   Direct deployment to Amazon Echo hardware is subject to Amazon's closed beta partner rollout.
-5. **Single-Tenant Demo Context:**  
-   The MVP operates on a default `demo-user` profile without multi-tenant OAuth 2.1 authentication.
-6. **Pre-Seeded Contacts Database:**  
-   Contact records are seeded via database scripts (`infrastructure/scripts/seed-contacts.ts`) rather than synced via real-time phone contact book permissions.
-
----
-
-## 13. Glossary
-
-- **Model Context Protocol (MCP):** An open, standardized protocol created by Anthropic that standardizes how AI applications expose tools, resources, and contextual prompts to language models.
-- **Streamable HTTP:** The modern, spec-compliant transport mechanism for MCP (spec `2025-11-25`), replacing legacy HTTP+SSE by supporting bidirectional streaming over standard HTTP POST/GET endpoints.
-- **Zod Schema:** A TypeScript-first schema declaration and validation library used in the MCP server to guarantee compile-time and runtime type safety for tool inputs and outputs.
-- **Conditional Write (`ConditionExpression`):** An atomic database feature in Amazon DynamoDB that guarantees an update or put operation succeeds only if specific attribute conditions evaluate to true, eliminating concurrency race conditions.
-- **Global Secondary Index (GSI):** An auxiliary DynamoDB index with a partition key and sort key that can be different from those on the base table, enabling fast queries across non-primary attributes.
-- **Time-to-Live (TTL):** An automated DynamoDB feature that periodically purges expired items from tables based on an epoch-second timestamp without consuming provisioned write throughput.
-- **Safety Guard:** A deterministic, non-LLM validation check executed at the server capability boundary that verifies preconditions before allowing a sensitive operation to proceed.
-- **Confirmation Token:** A cryptographically random, server-issued UUID generated when a draft is created, required by the MCP server to validate that an execution call directly corresponds to an authorized draft.
-- **Draft Lifecycle:** The formal state machine (`draft` → `confirmed` → `sent`) governing outbound messages, enforced by DynamoDB conditional expressions to prevent duplicate or unauthorized transmissions.
-
----
-
-### Reminder Lifecycle
-
-Reminders deduplicate on `(userId, relatedContextId)`. If a user asks
-for a reminder about the same context twice, the second request updates
-the existing reminder's scheduled time rather than creating a new row.
-
-Reminders have three states:
-- `active` — scheduled for the future, will fire
-- `completed` — the user acknowledged it
-- `cancelled` — the user cancelled it
-
-A reminder whose `scheduledAt` is in the past but still in `active`
-status is a "missed reminder." It is excluded from the morning briefing
-and shown separately via the `list_missed_reminders` tool when the user
-asks "what did I miss?"
-
-Reminders completed or cancelled more than 90 days ago are removed by
-DynamoDB TTL. No manual cleanup is required.
-
----
-
----
 ## Multi-User Extension
 
 The current build is single-user. `AGENT_USER_ID` is a fixed value
@@ -1468,6 +1515,36 @@ per-user setup step, not a per-reminder one.
 Only the delivery layer changes. The scheduling and safety
 infrastructure is already multi-user ready — `userId` is part of every
 DynamoDB key.
+
 ---
+
+## 12. Known Limitations
+
+1. **Extraction Latency & Perceptual Mitigation:**  
+   Two sequential LLM calls (Planner intent classification + Response natural language generation) introduce approximately 1.0–1.8 seconds of end-to-end turn latency. The web client mitigates user friction using an acoustic Web Audio API chime and speech synthesis acknowledgement triggered when processing exceeds 600ms (`MASK_THRESHOLD_MS`).
+2. **Volatile In-Memory Dialog State:**  
+   Active turn buffers and pending confirmation tokens reside in Node.js process memory; an ungraceful container restart during a pending confirmation requires the user to repeat their request.
+3. **Simulated Outbound Telephony:**  
+   The MVP records outbound sends in the database without connecting to external carrier SMS aggregators.
+4. **Partner-Restricted Alexa+ Native Hosting:**  
+   Direct deployment to Amazon Echo hardware is subject to Amazon's closed beta partner rollout.
+5. **Single-Tenant Demo Context:**  
+   The MVP operates on a default `demo-user` profile without multi-tenant OAuth 2.1 authentication.
+6. **Pre-Seeded Contacts Database:**  
+   Contact records are seeded via database scripts (`infrastructure/scripts/seed-contacts.ts`) rather than synced via real-time phone contact book permissions.
+
+---
+
+## 13. Glossary
+
+- **Model Context Protocol (MCP):** An open, standardized protocol created by Anthropic that standardizes how AI applications expose tools, resources, and contextual prompts to language models.
+- **Streamable HTTP:** The modern, spec-compliant transport mechanism for MCP (spec `2025-11-25`), replacing legacy HTTP+SSE by supporting bidirectional streaming over standard HTTP POST/GET endpoints.
+- **Zod Schema:** A TypeScript-first schema declaration and validation library used in the MCP server to guarantee compile-time and runtime type safety for tool inputs and outputs.
+- **Conditional Write (`ConditionExpression`):** An atomic database feature in Amazon DynamoDB that guarantees an update or put operation succeeds only if specific attribute conditions evaluate to true, eliminating concurrency race conditions.
+- **Global Secondary Index (GSI):** An auxiliary DynamoDB index with a partition key and sort key that can be different from those on the base table, enabling fast queries across non-primary attributes.
+- **Time-to-Live (TTL):** An automated DynamoDB feature that periodically purges expired items from tables based on an epoch-second timestamp without consuming provisioned write throughput.
+- **Safety Guard:** A deterministic, non-LLM validation check executed at the server capability boundary that verifies preconditions before allowing a sensitive operation to proceed.
+- **Confirmation Token:** A cryptographically random, server-issued UUID generated when a draft is created, required by the MCP server to validate that an execution call directly corresponds to an authorized draft.
+- **Draft Lifecycle:** The formal state machine (`draft` → `confirmed` → `sent`) governing outbound messages, enforced by DynamoDB conditional expressions to prevent duplicate or unauthorized transmissions.
 
 *Authored for the Amazon Developer Hackathon 2026 — Alexa+ Track.*
