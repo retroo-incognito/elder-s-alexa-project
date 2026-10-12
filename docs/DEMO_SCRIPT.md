@@ -21,241 +21,247 @@
 
 ## SCENE 1 — The Problem (0:00 – 0:20)
 
-**On screen:** Static title card or a blurred photo of a utility bill.
+**On screen:** Static title card or a blurred photo/mockup of a confusing utility bill and SMS notification.
 
-**Narration:**
+**Tone & Pacing:** Empathetic, deliberate, authoritative.
 
-> "Everyday digital services assume you can read a complex message,
-> understand a deadline, and act on it — often within minutes.
+**Narration (Voiceover):**
+
+> "Everyday digital services make a dangerous assumption: they assume you can effortlessly parse a confusing utility bill or clinic SMS, track down an obscure deadline, navigate complex multi-screen apps, and act on it—often within minutes.
 >
-> For millions of adults, that assumption creates a wall between what
-> they want to do and what the interface allows.
+> For millions of adults—particularly older adults or anyone managing cognitive fatigue—that assumption creates an insurmountable wall between what they want to accomplish and what digital interfaces demand.
 >
-> We built an agent that removes that wall."
+> We built the **Alexa+ Everyday Independence Agent** to tear that wall down."
 
-**Do not:** Show architecture. Show a logo for more than 2 seconds.
+**Do not:** Show architecture diagrams yet. Show a logo or title card for no more than 2–3 seconds.
 
 ---
 
 ## SCENE 2 — The Product (0:20 – 0:35)
 
-**On screen:** Cut to the web UI. Three panels visible.
+**On screen:** Cut to the clean web UI (`localhost:5173`). Highlight the 3-panel layout: Left (Conversation Stream), Center (Persistent Context Card), Right (Verified Actions Log).
 
-**Narration:**
+**Tone & Pacing:** Clear, confident, enthusiastic.
 
-> "This is the Everyday Independence Agent. It runs on the Model
-> Context Protocol — the same open standard Alexa+ uses for add-ons.
+**Narration (Voiceover):**
+
+> "This is the Everyday Independence Agent. Built specifically for the Alexa+ hackathon track, it connects directly to a spec-compliant Model Context Protocol server over Streamable HTTP.
 >
-> It does three things no chatbot does: it remembers what matters, it
-> resolves who you mean, and it stops before doing anything that leaves
-> the room."
+> It does three things no traditional chatbot can do: it maintains persistent contextual memory across conversations in DynamoDB, it resolves real-world contacts like family members, and it enforces a strict, non-LLM confirmation gate before anything ever leaves the room."
 
 ---
 
 ## SCENE 3 — Understand (0:35 – 0:55)
 
-**Type in composer:**
+**Action on screen:** Click microphone or type in the composer:
 
+```text
+I got a message from the electricity company. I dont understand it.
+```
 
-## I got a message from the electricity company. I dont understand it.
+*(Optional: paste the sample bill text if using full SMS format)*
 
+**Narration (Voiceover while typing / sending):**
 
-**Narration while typing:**
+> "Let's walk through a real-world scenario. An older adult living independently receives an alarming message from their regional power board filled with account numbers, due dates, and disconnection warnings. Instead of getting stuck in a mobile portal, they simply speak to Alexa: *'I got a message from the electricity company. I don't understand it.'*"
 
-> "A user has received a bill they don't understand."
+**Wait for agent response (pause 1–2 seconds as UI updates).**
 
-**Wait for reply, then pause for 2 seconds.**
+**Point cursor on screen:** Context panel shows ₹1,842 and the due date. Actions panel shows "Understood".
 
-**Narration:**
+**Narration (Voiceover as response appears):**
 
-> "The agent read the message, extracted the amount and the deadline,
-> and saved them as persistent context. Structured facts — not a summary."
-
-**Point out on screen:** Context panel shows ₹1,842 and the due date. Actions panel shows "Understood".
+> "Notice what happened instantly. The orchestrator invoked the MCP tool `analyze_message`. Rather than dumping an unstructured summary, it extracted verified facts—the bill amount of ₹1,842 and the September 28 deadline—and saved them directly to Amazon DynamoDB as persistent context. It explains everything in calm, plain language."
 
 ---
 
 ## SCENE 4 — Answer (0:55 – 1:10)
 
-**Type:**
+**Action on screen:** Type or speak into composer:
 
+```text
+What happens if I dont pay it?
+```
 
-## What happens if I dont pay it?
+**Narration (Voiceover while typing):**
 
-**Narration:**
+> "Now, the user asks a natural follow-up question driven by anxiety: *'What happens if I don't pay it?'*"
 
-> "When the user asks a follow-up, the agent answers only from what the
-> message actually says."
+**Wait for agent response (pause 1 second).**
 
-**Wait for reply.**
+**Narration (Voiceover as response appears):**
 
-**Narration:**
-
-> "If the answer isn't in the source, it says so. It does not guess.
-> That's the difference between help and harm."
+> "Watch how the agent responds. Because disconnection penalties were not detailed in the original message, the agent refuses to speculate. It answers plainly: *'The message doesn't say what happens after the deadline. I don't want to guess.'*
+>
+> It strictly grounds its answers on verified source facts. That anti-hallucination discipline is the critical difference between helping someone and causing panic."
 
 ---
 
 ## SCENE 5 — Remember and Plan (1:10 – 1:25)
 
-**Type:**
+**Action on screen:** Type or speak into composer:
 
-## Remind me in 1 minute.
+```text
+Remind me in 1 minute.
+```
 
-**Narration:**
+*(Note: In daily usage, the user might say 'Remind me on the 26th'. For this live demo, '1 minute' showcases the real-time AWS pipeline!)*
 
-> "Now the user wants a reminder."
+**Narration (Voiceover while typing):**
 
-**Wait for reply.** Actions panel shows "Reminder set".
+> "Now the user wants to stay on top of the deadline without stressing: *'Remind me in 1 minute.'*"
 
-**Narration:**
+**Wait for reply.** Actions panel updates with "Reminder set".
 
-> "The reminder is tied to the bill. When it fires, the user will see
-> the original context — not a bare string."
+**Narration (Voiceover as reminder confirms):**
+
+> "The orchestrator doesn't just record a detached string of text. It links this scheduled reminder directly to the active bill context in DynamoDB and registers it with AWS EventBridge Scheduler. When this reminder fires, it will carry the full context of the bill, so the user never has to wonder what it was for."
 
 ---
 
 ## SCENE 6 — Confirm (1:25 – 1:50)
 
-**Type:**
+**Action on screen:** Type or speak into composer:
 
-## And tell my daughter about it.
+```text
+And tell my daughter about it.
+```
 
-**Narration:**
+**Narration (Voiceover while typing):**
 
-> "The user wants to tell their daughter."
+> "Next, the user asks to loop in family for support: *'And tell my daughter about it.'*"
 
-**The amber confirmation card slides in. Pause for 2 full seconds.**
+**The amber confirmation card slides in. Pause for 2 full seconds of silence to let judges see the card.**
 
-**Narration:**
+**Narration (Voiceover pointing to the amber card):**
 
-> "The agent resolves 'my daughter' against a real contacts table —
-> Priya Sharma, WhatsApp, with her phone number. Then it drafts the
-> message. But it does not send."
+> "Watch what happens here. The agent calls `resolve_contact` to look up 'my daughter' against our contacts table—resolving Priya Sharma with her verified WhatsApp number. It calls `draft_family_message` to stage the update. But it deliberately halts and does NOT send."
 
-**Pause.**
+**Pause 1 second.**
 
-**Narration:**
+**Narration (Voiceover highlighting the safety gate):**
 
-> "This is the confirmation gate. Nothing leaves the device until the
-> user says yes — and when they do, the server independently validates
-> the confirmation before anything is sent."
+> "This is our asymmetric, three-layer safety gate. External communications carry real-world consequences, so nothing leaves the device without explicit, verified user authorization. The LLM cannot bypass this, and the amber dialog blocks execution."
 
-**Click "Yes, send it".**
+**Action on screen:** Click **"Yes, send it"** (or speak *"Yes"*).
 
-**Narration:**
+**Narration (Voiceover as message sends):**
 
-> "The model can't skip this step. The draft can't be resent. The
-> safety gate isn't a suggestion — it's enforced on both sides."
+> "When the user confirms, the MCP server independently validates the confirmation token using constant-time verification before dispatching. The model cannot skip this gate, and drafts cannot be replayed. Safety isn't just a prompt instruction—it is enforced deterministically on both sides."
 
 ---
 
 ## SCENE 7 — The AWS Pipeline (1:50 – 2:05)
 
-**Cut to the email inbox tab. The SNS email is visible.**
+**Action on screen:** Cut to the email inbox tab (Gmail). The SNS reminder email is visible.
 
-**Narration:**
+**Narration (Voiceover on email tab):**
 
-> "A minute later, the reminder fires. AWS EventBridge Scheduler
-> invoked a Lambda, which marked the reminder as fired and published
-> to SNS. The user gets an email — without ever asking again."
+> "Right on schedule, exactly one minute later, the reminder fires in the background. AWS EventBridge Scheduler invoked an AWS Lambda function, updating the status in DynamoDB and publishing the alert through Amazon SNS. The user's notification arrives automatically."
 
-**Cut back to the web UI. The notification card is visible at the top.**
+**Action on screen:** Cut back to the web UI tab. The notification card is visible at the top of the interface.
 
-> "The web UI shows the same notification in-app."
+**Narration (Voiceover back on web UI):**
+
+> "And right inside our ambient Alexa+ interface, the incoming reminder card displays seamlessly—closing the proactive loop without the user having to re-prompt."
 
 ---
 
 ## SCENE 8 — Memory Across Conversations (2:05 – 2:20)
 
-**Click "New conversation" in the header.**
+**Action on screen:** Click **"New conversation"** button in the header. (Workspace resets; prior chat disappears).
 
-**Type:**
+**Type or speak into composer:**
 
-## What was that bill I was worried about yesterday?
+```text
+What was that bill I was worried about yesterday?
+```
 
-**Narration:**
+**Narration (Voiceover while clicking and typing):**
 
-> "New conversation. Nothing on screen. The user refers to a bill they
-> never named."
+> "Now let's test cross-session memory. We click 'New Conversation'. The screen is blank, and the prior chat is gone. The user casually asks: *'What was that bill I was worried about yesterday?'*"
 
-**Wait for reply. The Context panel repopulates.**
+**Wait for reply.** The Context panel repopulates with the electricity bill card.
 
-**Narration:**
+**Narration (Voiceover as context restores):**
 
-> "The agent resolves 'that bill' against DynamoDB — the same
-> persistent state that saved it minutes ago. That's what makes it
-> useful over time."
+> "Notice how the agent instantly recalls the electricity bill from DynamoDB. It resolves ambiguous natural references like 'that bill' across days and sessions. This is persistent ambient context that genuinely supports independent living over time."
 
 ---
 
 ## SCENE 9 — It Generalizes (2:20 – 2:35)
 
-**New conversation. Type:**
+**Action on screen:** Click **"New conversation"**. Type or speak into composer:
 
-## I got this from my doctor: Appointment confirmed with Dr. Meera on 12 November at 4:30 PM at City Clinic, Room 3. I dont understand it.
+```text
+I got this from my doctor: Appointment confirmed with Dr. Meera on 12 November at 4:30 PM at City Clinic, Room 3. I dont understand it.
+```
 
+**Narration (Voiceover while typing):**
 
-**Narration:**
+> "The system isn't hardcoded for utility bills. Let's provide an entirely different domain—a specialist clinic appointment notification."
 
-> "The agent isn't hardcoded for bills. Any message — a doctor's
-> appointment, a school notice, a bank statement — extracts into the
-> same structured shape."
+**Wait for reply.** Context panel shows the appointment entity (Doctor, Date, Time, Room).
 
-**Wait for reply. Context panel shows the appointment card.**
+**Narration (Voiceover as appointment card appears):**
 
-**Narration:**
-
-> "Different message. Different fields. Same pipeline: understand,
-> remember, act, confirm."
+> "Instantly, the extraction pipeline identifies the physician, date, time, and room location, saving the new structured entity. Whether it's medical notices, utility bills, municipal circulars, or bank alerts, the pipeline remains identical: Understand, Ground, Remember, and Safely Act."
 
 ---
 
 ## SCENE 10 — Architecture (2:35 – 2:50)
 
-**Cut to a simple diagram:**
+**Action on screen:** Cut to the clean architecture diagram or slide:
 
-## Alexa+ / Web UI → Agent → MCP Server → Tools → DynamoDB + Bedrock
+```text
+Alexa+ Ambient UI (React 19) ──▶ Agent Orchestrator (Node.js) ──▶ MCP Server (Streamable HTTP)
+                                                                            │
+                                     ┌──────────────────────────────────────┴─────────────────┐
+                                     ▼                                                        ▼
+                        Amazon Bedrock (Claude Sonnet)                              AWS DynamoDB + EventBridge
+```
 
-**Narration:**
+**Narration (Voiceover):**
 
-> "The conversational layer talks to an agent that classifies intent
-> and sequences tool calls. The agent reaches a real MCP server over
-> Streamable HTTP — the transport Alexa+ requires — with fourteen
-> typed tools.
+> "Under the hood, our architecture strictly decouples reasoning from capability. The conversational agent handles intent classification and relative date math, then communicates with our standalone MCP Server over Streamable HTTP—the exact transport required by Alexa+.
 >
-> The agent and the server are separate processes. The agent decides
-> what to do. The server decides whether it's allowed. Neither trusts
-> the other."
+> The agent decides what to request, but the MCP server independently validates all schemas and enforces safety policies. Direct database access is prohibited, ensuring complete security isolation."
 
 ---
 
 ## SCENE 11 — Closing (2:50 – 3:00)
 
-**Return to the web UI. The conversation and context panel visible.**
+**Action on screen:** Return to the live web UI. Show the conversation and populated context panel.
 
-**Narration:**
+**Tone & Pacing:** Warm, inspiring, concluding.
 
-> "The product isn't a smarter chatbot. It's a layer that sits between
-> a person and the services that assume too much.
+**Narration (Voiceover):**
+
+> "The Alexa+ Everyday Independence Agent isn't just another conversational chatbot. It is a protective ambient layer designed for real people dealing with everyday digital overload.
 >
-> The goal isn't to teach people how to use more interfaces. It's to
-> make digital services adapt to the way people naturally ask for help."
+> It doesn't force people to learn complicated interfaces—it makes technology adapt to the way people naturally ask for help.
+>
+> Thank you."
 
-**Fade to black.** End card: project name, Suraj & Kapish, GitHub URL.
+**Fade to black.** End card: Project Name: **Alexa+ Everyday Independence Agent**, Team: **Suraj Thapa & Kapish Bisht**, GitHub URL.
 
 ---
 
 ## Backup — 60-second version
 
-If a shorter cut is needed:
+If a shorter cut is needed (e.g. strict 1-minute limit):
 
-1. **0:00–0:10** — Problem statement (Scene 1, compressed)
-2. **0:10–0:25** — Understand the bill (Scene 3)
-3. **0:25–0:50** — The confirmation gate (Scene 6) — this is the whole story
-4. **0:50–1:00** — Closing line
+1. **0:00–0:10 — Problem Statement:**
+   > *"Everyday digital services assume you can read complex messages, navigate apps, and remember deadlines. For millions of adults, that creates a wall. The Alexa+ Everyday Independence Agent removes that wall."*
 
-Cut everything else.
+2. **0:10–0:25 — Understand the Bill:**
+   > *(Type bill message)* *"The agent extracts verified facts—₹1,842 due September 28—into persistent DynamoDB memory, explaining it in plain language with strict anti-hallucination grounding."*
+
+3. **0:25–0:50 — The Confirmation Gate:**
+   > *(Type 'Tell my daughter about it')* *"When asked to notify family, the agent resolves Priya on WhatsApp, drafts the message, but stops. Nothing leaves the device without verified user authorization. Our 3-layer safety gate enforces deterministic confirmation on both sides."*
+
+4. **0:50–1:00 — Closing Line:**
+   > *"Running on the Model Context Protocol over Streamable HTTP, we make digital services adapt to the way people naturally ask for help."*
 
 ---
 

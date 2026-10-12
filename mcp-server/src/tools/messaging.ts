@@ -4,6 +4,8 @@ import {
   DraftFamilyMessageOutput,
   SendFamilyMessageInput,
   SendFamilyMessageOutput,
+  ListRecentDraftsInput,
+  ListRecentDraftsOutput,
 } from '../schemas/tool-schemas.js';
 import * as drafts from '../db/drafts.js';
 import * as contacts from '../db/contacts.js';
@@ -105,6 +107,35 @@ export function registerMessagingTools(server: McpServer): void {
         sent: true,
         draftId,
         sentAt: new Date().toISOString(),
+      };
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result) }],
+        structuredContent: result,
+      };
+    },
+  );
+
+    server.registerTool(
+    'list_recent_drafts',
+    {
+      title: 'List Recent Drafts',
+      description:
+        'List the most recently created message drafts for a user. ' +
+        'Used by the activity log, the caregiver view, and the ' +
+        '"what have you done?" intent.',
+      inputSchema: ListRecentDraftsInput,
+      outputSchema: ListRecentDraftsOutput,
+    },
+    async ({ userId, limit }) => {
+      const records = await drafts.listRecentDrafts(userId, limit);
+      const result = {
+        drafts: records.map((d) => ({
+          draftId: d.draftId,
+          recipient: d.recipient,
+          content: d.content,
+          status: d.status,
+          createdAt: d.createdAt,
+        })),
       };
       return {
         content: [{ type: 'text', text: JSON.stringify(result) }],

@@ -342,3 +342,31 @@ export const FindFiredRemindersOutput = z.object({
     }),
   ),
 });
+
+export const DeleteContextInput = z.object({
+  userId: z.string(),
+  contextKey: z.string().describe('The key of the context to delete, e.g. "electricity_bill"'),
+});
+
+export const DeleteContextOutput = z.object({
+  deleted: z.boolean(),
+  contextId: z.string().optional(),
+  reason: z.string().optional(),
+});
+
+export const ListRecentDraftsInput = z.object({
+  userId: z.string(),
+  limit: z.number().int().positive().max(50).default(10),
+});
+
+export const ListRecentDraftsOutput = z.object({
+  drafts: z.array(
+    z.object({
+      draftId: z.string(),
+      recipient: z.string(),
+      content: z.string(),
+      status: z.string(),
+      createdAt: z.string(),
+    }),
+  ),
+});

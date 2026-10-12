@@ -88,6 +88,8 @@ function MainApp() {
   const turnsRef = useRef(turns);
   const [briefing, setBriefing] = useState<string | null>(null);
   const briefingCheckedRef = useRef(false);
+  const [voiceOn, setVoiceOn] = useState(true);
+  const submittingRef = useRef(false);
   const [notifications, setNotifications] = useState<
     Array<{ reminderId: string; title: string; firedAt: string }>
   >([]);
@@ -178,9 +180,15 @@ function MainApp() {
     inputRef.current?.focus();
   }, []);
 
+  function handleDeny() {
+    stopSpeaking();
+    void submit("No.");
+  }
+
   async function submit(text: string): Promise<void> {
     const trimmed = text.trim();
-    if (!trimmed || busy) return;
+    if (!trimmed || submittingRef.current) return;
+    submittingRef.current = true;
     setBusy(true);
     setInput("");
     setPhase("submitted");
@@ -221,6 +229,9 @@ function MainApp() {
         text: res.reply,
         at: new Date().toISOString(),
       });
+      if (voiceOn) {
+        speak(res.reply);
+      }
       setContext(res.context);
       setActions((prev) => [...prev, ...res.actions]);
       setPending(res.pendingConfirmation);
@@ -228,6 +239,24 @@ function MainApp() {
         setConversationId(res.conversationId);
         sessionStorage.setItem(SESSION_KEY, res.conversationId);
       }
+      setTurns((prev) => [
+        ...prev,
+        {
+          id: newId(),
+          role: "agent",
+          text: res.reply,
+          at: new Date().toISOString(),
+        },
+      ]);
+
+      // Speak the reply if it's a confirmation prompt, or if the
+      // user used voice input for this turn. High-stakes details get
+      // read back; routine replies stay silent unless the user prefers voice.
+      // const shouldSpeak = res.pendingConfirmation !== null;
+      // if (shouldSpeak) {
+      //   speak(res.reply);
+      // }
+      speak(res.reply);
     } catch (err) {
       if (maskingTimerRef.current !== null) {
         window.clearTimeout(maskingTimerRef.current);
@@ -244,6 +273,7 @@ function MainApp() {
       });
       setInput(trimmed);
     } finally {
+      submittingRef.current = false;
       setBusy(false);
     }
   }
@@ -251,6 +281,7 @@ function MainApp() {
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>): void {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
+      e.stopPropagation();
       void submit(input);
     }
   }
@@ -317,6 +348,17 @@ function MainApp() {
   return (
     <div className="app-shell">
       <header className="system-bar">
+        <button
+          type="button"
+          className="app__voice-toggle"
+          onClick={() => {
+            setVoiceOn((v) => !v);
+            stopSpeaking();
+          }}
+          aria-label={voiceOn ? "Mute voice" : "Unmute voice"}
+        >
+          {voiceOn ? "🔊" : "🔇"}
+        </button>
         <a
           className="brand"
           href="#home"

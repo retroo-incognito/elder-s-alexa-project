@@ -281,17 +281,141 @@ setInterval(
 function getCurrentMessage(): { content: string; source: string } {
   // Use a fixed future date well past the hackathon window so the
   // demo remains coherent regardless of recording date.
-  const due = new Date();
-  due.setUTCMonth(due.getUTCMonth() + 1, 15);
-  const dueLabel = due.toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    timeZone: "UTC",
-  });
+  // const due = new Date();
+  // due.setUTCMonth(due.getUTCMonth() + 1, 15);
+  // const dueLabel = due.toLocaleDateString("en-US", {
+  //   month: "long",
+  //   day: "numeric",
+  //   timeZone: "UTC",
+  // });
+   const now = new Date();
+  const monthName = now.toLocaleDateString('en-IN', { month: 'long' });
+  const year = now.getFullYear();
+  const day = 15;
 
   return {
-    content: `Electricity bill of ₹1,842.\nPayment due ${dueLabel}.`,
+    // content: `Electricity bill of ₹1,842.\nPayment due ${dueLabel}.`,
+    content: `Electricity bill of ₹1,842.\nPayment due ${day} ${monthName} ${year}.`,
     source: "demo_fixture",
+  };
+}
+
+async function handleAskActivity(
+  state: ConversationState,
+): Promise<AgentOutput> {
+  const log = await callTool<{
+    drafts: Array<{
+      recipient: string;
+      content: string;
+      status: string;
+      createdAt: string;
+    }>;
+  }>("list_recent_drafts", { userId: state.userId, limit: 10 });
+
+  // Also grab recent contexts so the agent can narrate more than messages.
+  const contexts = await callTool<{
+    contexts: Array<{
+      contextId: string;
+      type: string;
+      key: string;
+      createdAt: string;
+    }>;
+  }>("list_recent_contexts", { userId: state.userId, limit: 10 });
+
+  const now = Date.now();
+  const within24h = (iso: string) =>
+    now - new Date(iso).getTime() < 24 * 60 * 60 * 1000;
+
+  const events: string[] = [];
+
+  for (const c of contexts.contexts) {
+    if (!within24h(c.createdAt)) continue;
+    const time = new Date(c.createdAt).toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    events.push(`at ${time} I read a ${c.type}`);
+  }
+
+  for (const d of log.drafts) {
+    if (!within24h(d.createdAt)) continue;
+    const time = new Date(d.createdAt).toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const verb =
+      d.status === "sent" ? "queued a message to" : "drafted a message to";
+    events.push(`at ${time} I ${verb} ${d.recipient}`);
+  }
+
+  if (events.length === 0) {
+    return {
+      reply: "I haven't done anything in the last day.",
+      conversationId: state.conversationId,
+      context: state.activeContext,
+      actions: [],
+      pendingConfirmation: null,
+    };
+  }
+
+  return {
+    reply: `In the last day, ${events.join("; ")}.`,
+    conversationId: state.conversationId,
+    context: state.activeContext,
+    actions: [],
+    pendingConfirmation: null,
+  };
+}
+
+async function handleForgetContext(
+  state: ConversationState,
+  message: string,
+): Promise<AgentOutput> {
+  const activeKey = state.activeContext?.key;
+  if (!activeKey) {
+    return {
+      reply:
+        "I don't have anything active to forget. Could you tell me what to remove?",
+      conversationId: state.conversationId,
+      context: null,
+      actions: [],
+      pendingConfirmation: null,
+    };
+  }
+
+  const result = await callTool<{
+    deleted: boolean;
+    contextId?: string;
+    reason?: string;
+  }>("delete_context", {
+    userId: state.userId,
+    contextKey: activeKey,
+  });
+
+  if (!result.deleted) {
+    return {
+      reply: `I couldn't find that. ${result.reason ?? ""}`.trim(),
+      conversationId: state.conversationId,
+      context: state.activeContext,
+      actions: [],
+      pendingConfirmation: null,
+    };
+  }
+
+  state.activeContext = null;
+
+  return {
+    reply: `Done. I've forgotten the ${activeKey.replace(/_/g, " ")}. It's gone from my memory.`,
+    conversationId: state.conversationId,
+    context: null,
+    actions: [
+      {
+        type: "message_cancelled",
+        summary: `Deleted context: ${activeKey}`,
+        at: now(),
+      },
+    ],
+    pendingConfirmation: null,
   };
 }
 
@@ -349,6 +473,12 @@ export async function handleMessage(input: AgentInput): Promise<AgentOutput> {
       break;
     case "MISSED_REMINDERS":
       output = await handleMissedReminders(state);
+      break;
+    case "ASK_ACTIVITY":
+      output = await handleAskActivity(state);
+      break;
+    case "FORGET_CONTEXT":
+      output = await handleForgetContext(state, input.message);
       break;
     default:
       output = await handleUnknown(state, input.message);

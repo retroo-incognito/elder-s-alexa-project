@@ -45,5 +45,11 @@ Return ONLY valid JSON, no markdown fences, with these fields:
 - "extractedReference": if the user refers to something ("that bill",
   "the appointment"), extract the noun phrase; otherwise null.
 - MISSED_REMINDERS: The user asks what they forgot or missed
+- ASK_ACTIVITY: The user asks what the agent has done recently.
+  Examples: "What did you do?", "What have you done today?",
+  "Show me what you did this week."
+  - FORGET_CONTEXT: The user asks to delete or forget a saved fact.
+  Examples: "Forget the electricity bill", "Delete that appointment",
+  "Remove the water bill from my memory."
 (for example "What did I miss?", "Did I forget anything?", "What did I forget?").
 `.trim();

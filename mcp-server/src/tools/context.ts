@@ -1,6 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type * as z from "zod/v4";
 import {
+  DeleteContextInput,
+  DeleteContextOutput,
   GetContextInput,
   GetContextOutput,
   ListRecentContextsInput,
@@ -119,30 +121,62 @@ export function registerContextTools(server: McpServer): void {
     },
   );
   server.registerTool(
-  'list_recent_contexts',
-  {
-    title: 'List Recent Contexts',
-    description:
-      'List the most recently saved contexts for a user, regardless of type. ' +
-      'Use this for briefings, activity feeds, or when no specific type is known.',
-    inputSchema: ListRecentContextsInput,
-    outputSchema: ListRecentContextsOutput,
-  },
-  async ({ userId, limit }) => {
-    const records = await contexts.listRecentContexts(userId, limit);
-    const result = {
-      contexts: records.map((r) => ({
-        contextId: r.contextId,
-        type: r.type,
-        key: r.key,
-        data: r.data,
-        createdAt: r.createdAt,
-      })),
-    };
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result) }],
-      structuredContent: result,
-    };
-  },
-);
+    "list_recent_contexts",
+    {
+      title: "List Recent Contexts",
+      description:
+        "List the most recently saved contexts for a user, regardless of type. " +
+        "Use this for briefings, activity feeds, or when no specific type is known.",
+      inputSchema: ListRecentContextsInput,
+      outputSchema: ListRecentContextsOutput,
+    },
+    async ({ userId, limit }) => {
+      const records = await contexts.listRecentContexts(userId, limit);
+      const result = {
+        contexts: records.map((r) => ({
+          contextId: r.contextId,
+          type: r.type,
+          key: r.key,
+          data: r.data,
+          createdAt: r.createdAt,
+        })),
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(result) }],
+        structuredContent: result,
+      };
+    },
+  );
+
+  server.registerTool(
+    "delete_context",
+    {
+      title: "Delete Context",
+      description:
+        "Permanently delete a stored context by key. Use when the user " +
+        'asks to forget something ("forget the electricity bill"). ' +
+        "This is a hard delete — the row is removed from DynamoDB.",
+      inputSchema: DeleteContextInput,
+      outputSchema: DeleteContextOutput,
+    },
+    async ({ userId, contextKey }) => {
+      const existing = await contexts.getContextByKey(userId, contextKey);
+      if (!existing) {
+        const result = {
+          deleted: false,
+          reason: `No context found with key "${contextKey}".`,
+        };
+        return {
+          content: [{ type: "text", text: JSON.stringify(result) }],
+          structuredContent: result,
+        };
+      }
+      await contexts.deleteContext(userId, existing.contextId);
+      const result = { deleted: true, contextId: existing.contextId };
+      return {
+        content: [{ type: "text", text: JSON.stringify(result) }],
+        structuredContent: result,
+      };
+    },
+  );
 }

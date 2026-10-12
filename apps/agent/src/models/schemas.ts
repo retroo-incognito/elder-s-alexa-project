@@ -73,6 +73,8 @@ export type Intent =
   | 'RETRIEVE_CONTEXT'
   | 'LIST_REMINDERS'
   | 'MISSED_REMINDERS'
+  | 'ASK_ACTIVITY'
+  | 'FORGET_CONTEXT'
   | 'UNKNOWN';
 
 export interface Plan {
@@ -117,7 +119,7 @@ export interface ConversationState {
   activeContext: ContextMatch | null;
   pendingConfirmation: PendingConfirmation | null;
   pendingContactClarification: PendingContactClarification | null;
-  pendingQuarantineEscalation: PendingQuarantineEscalation | null;  // ← add
+  pendingQuarantineEscalation: PendingQuarantineEscalation | null;  // ← add  
   createdAt: string;
   updatedAt: string;
 }

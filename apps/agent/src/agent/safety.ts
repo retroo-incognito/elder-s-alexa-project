@@ -20,6 +20,8 @@ const TOOL_LEVELS: Record<string, SafetyLevel> = {
   mark_reminder_fired: SafetyLevel.LOW_RISK,
   complete_reminder: SafetyLevel.LOW_RISK,
   find_fired_reminders: SafetyLevel.READ,
+  list_recent_drafts: SafetyLevel.READ,
+  forget_context: SafetyLevel.IRREVERSIBLE,
 };
 
 export function getSafetyLevel(toolName: string): SafetyLevel {
