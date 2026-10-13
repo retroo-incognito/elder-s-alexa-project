@@ -551,7 +551,8 @@ a:focus-visible {
   vertical-align: -2px;
   margin-right: 6px;
 }
-.mic {
+.mic,
+.app__voice-toggle {
   width: 39px;
   height: 39px;
   border: 1px solid var(--border-strong);
@@ -562,12 +563,14 @@ a:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
   transition:
     border-color 0.18s,
     color 0.18s,
     background 0.18s;
 }
-.mic:hover:not(:disabled) {
+.mic:hover:not(:disabled),
+.app__voice-toggle:hover:not(:disabled) {
   border-color: var(--purple);
   color: var(--purple);
   background: #fff9f4;
@@ -1534,7 +1537,7 @@ body { background: var(--bg); }
 .console-footer { border-top-color: #f0f0f5; }
 .execute-button { border-radius: 9px; background: #6754d9; border-color: #6754d9; box-shadow: 0 5px 12px rgba(103,84,217,.18); }
 .execute-button:hover:not(:disabled) { background: #5745c4; border-color: #5745c4; }
-.mic { border-radius: 9px; background: #fbfbfd; }
+.mic, .app__voice-toggle { border-radius: 9px; background: #fbfbfd; }
 .suggestions { align-items: flex-start; flex-direction: column; gap: 10px; padding-top: 19px; }
 .suggestions > .eyebrow { letter-spacing: .14em; font-size: 8px; }
 .suggestion-list { gap: 8px; }

@@ -334,17 +334,6 @@ function MainApp() {
   return (
     <div className="app-shell">
       <header className="system-bar">
-        <button
-          type="button"
-          className="app__voice-toggle"
-          onClick={() => {
-            setVoiceOn((v) => !v);
-            stopSpeaking();
-          }}
-          aria-label={voiceOn ? "Mute voice" : "Unmute voice"}
-        >
-          {voiceOn ? "🔊" : "🔇"}
-        </button>
         <a
           className="brand"
           href="#home"
@@ -514,6 +503,17 @@ function MainApp() {
                     onInterimTranscript={setInterim}
                     disabled={busy}
                   />
+                  <button
+                    type="button"
+                    className="app__voice-toggle"
+                    onClick={() => {
+                      setVoiceOn((v) => !v);
+                      stopSpeaking();
+                    }}
+                    aria-label={voiceOn ? "Mute voice" : "Unmute voice"}
+                  >
+                    {voiceOn ? "🔊" : "🔇"}
+                  </button>
                   <button
                     type="button"
                     className="execute-button"
