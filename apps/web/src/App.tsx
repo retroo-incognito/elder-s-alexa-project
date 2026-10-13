@@ -188,6 +188,7 @@ function MainApp() {
   async function submit(text: string): Promise<void> {
     const trimmed = text.trim();
     if (!trimmed || submittingRef.current) return;
+
     submittingRef.current = true;
     setBusy(true);
     setInput("");
@@ -198,8 +199,6 @@ function MainApp() {
     maskingTimerRef.current = window.setTimeout(() => {
       setPhase("masking");
       playThinkingChime();
-      // 150ms after the chime starts, speak. Overlapping the two feels
-      // natural — chime is the "I heard you," speech is the "working on it."
       window.setTimeout(() => {
         speak("One moment.");
       }, 150);
@@ -212,10 +211,10 @@ function MainApp() {
       at: new Date().toISOString(),
     };
     saveTurn(conversationId, userTurn, true);
+
     try {
       const res = await sendMessage(conversationId, trimmed);
 
-      // Response arrived — cancel masking before rendering.
       if (maskingTimerRef.current !== null) {
         window.clearTimeout(maskingTimerRef.current);
         maskingTimerRef.current = null;
@@ -223,40 +222,27 @@ function MainApp() {
       stopSpeaking();
       setPhase("idle");
 
+      // saveTurn adds the agent turn to state AND persists it.
+      // Do not also call setTurns — that would double the message.
       saveTurn(conversationId, {
         id: newId(),
         role: "agent",
         text: res.reply,
         at: new Date().toISOString(),
       });
+
       if (voiceOn) {
         speak(res.reply);
       }
+
       setContext(res.context);
       setActions((prev) => [...prev, ...res.actions]);
       setPending(res.pendingConfirmation);
+
       if (res.conversationId !== conversationId) {
         setConversationId(res.conversationId);
         sessionStorage.setItem(SESSION_KEY, res.conversationId);
       }
-      setTurns((prev) => [
-        ...prev,
-        {
-          id: newId(),
-          role: "agent",
-          text: res.reply,
-          at: new Date().toISOString(),
-        },
-      ]);
-
-      // Speak the reply if it's a confirmation prompt, or if the
-      // user used voice input for this turn. High-stakes details get
-      // read back; routine replies stay silent unless the user prefers voice.
-      // const shouldSpeak = res.pendingConfirmation !== null;
-      // if (shouldSpeak) {
-      //   speak(res.reply);
-      // }
-      speak(res.reply);
     } catch (err) {
       if (maskingTimerRef.current !== null) {
         window.clearTimeout(maskingTimerRef.current);
