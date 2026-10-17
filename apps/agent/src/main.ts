@@ -8,7 +8,17 @@ import { callTool, disconnect } from "./lib/mcp-client.js";
 import type { AgentInput } from "./models/schemas.js";
 import { startScheduler } from "./lib/scheduler.js";
 
-startScheduler();
+// startScheduler();
+const awsSchedulerConfigured =
+  Boolean(process.env.REMINDER_HANDLER_ARN) &&
+  Boolean(process.env.SCHEDULER_ROLE_ARN);
+
+if (!awsSchedulerConfigured) {
+  startScheduler();
+  logger.info('Local scheduler started (AWS not configured)');
+} else {
+  logger.info('AWS scheduler active — local scheduler disabled');
+}
 
 const app = express();
 app.use(cors());
