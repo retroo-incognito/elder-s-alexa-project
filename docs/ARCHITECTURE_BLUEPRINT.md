@@ -376,14 +376,24 @@ The factory (`apps/agent/src/lib/llm/factory.ts`) initializes the active provide
 | Service                               | Port   | Protocol                      | Purpose                                               |
 | ------------------------------------- | ------ | ----------------------------- | ----------------------------------------------------- |
 | **Web Frontend** (`apps/web`)         | `5173` | HTTP / WebSocket              | User-facing simulated Alexa+ interface                |
-| **Agent Orchestrator** (`apps/agent`) | `3000` | HTTP REST (`POST /api/chat`)  | Natural language reasoning & session management       |
+| **Agent Orchestrator** (`apps/agent`) | `3000` | HTTP REST                     | Natural language reasoning, briefing & session management |
 | **MCP Server** (`mcp-server`)         | `3001` | Streamable HTTP (`POST /mcp`) | Capability exposure, input validation, tool execution |
+
+#### Agent REST API Endpoints (`apps/agent`)
+
+| Endpoint | Method | Purpose |
+| -------- | ------ | ------- |
+| `/api/health` | `GET` | Service status, health check, and runtime version |
+| `/api/chat` | `POST` | Core conversational turn processing and orchestration |
+| `/api/proactive/morning` | `POST` | Generates proactive morning briefing (today/tomorrow events) |
+| `/api/notifications` | `GET` | Polls for fired, unacknowledged reminder notifications |
+| `/api/notifications/acknowledge/:reminderId` | `POST` | Acknowledges and completes a fired reminder |
 
 ---
 
 ## 4. The MCP Tool Surface
 
-The server exposes 9 typed tools defined in `mcp-server/src/schemas/tool-schemas.ts` and registered in `mcp-server/src/build-server.ts`.
+The server exposes 16 typed tools defined in `mcp-server/src/schemas/tool-schemas.ts` and registered in `mcp-server/src/build-server.ts`. Tools are organized across four operational domains: **Understanding**, **Memory & Context**, **Scheduling & Reminders**, and **Contacts & Messaging**.
 
 ---
 
@@ -697,30 +707,59 @@ export const SendFamilyMessageOutput = z.object({
 
 ### 4.9 `scan_threat`
 
-- **Purpose:** Deterministic regex scanner for scam and phishing signals.
-  Runs before `analyze_message`. Cannot be prompt-injected.
+- **Purpose:** Deterministic regex scanner for scam and phishing signals. Runs before `analyze_message`. Cannot be prompt-injected.
+- **Implemented in:** [`mcp-server/src/tools/threat-scan.ts`](file:///H:/htdocs/meeting2action-alexa-agent/elder-s-alexa-project/mcp-server/src/tools/threat-scan.ts)
 - **Input:** `{ content: string, source?: string, senderId?: string }`
-- **Output:** `{ risk: 'low'|'medium'|'high', signals: [...],
-  reasoning: string, blockActions: boolean, allowListed: boolean }`
-- **Enforcement:** When `blockActions` is true, the orchestrator refuses
-  to call `draft_family_message` or `send_family_message` for that content.
-- **Implemented in:** `mcp-server/src/tools/threat-scan.ts`
+- **Output:** `{ risk: 'low' | 'medium' | 'high', signals: string[], reasoning: string, blockActions: boolean, allowListed: boolean }`
+- **Enforcement & Quarantine Escalation Flow:**
+  1. When `blockActions` is `true`, the orchestrator refuses to call `draft_family_message` or `send_family_message` directly.
+  2. Instead of a dead-end rejection, the orchestrator triggers an active **Quarantine Escalation Flow** (`handleQuarantineResponse` in [`orchestrator.ts`](file:///H:/htdocs/meeting2action-alexa-agent/elder-s-alexa-project/apps/agent/src/agent/orchestrator.ts)):
+     - Sanitizes the message via `sanitizeForForwarding()` by stripping all URLs (`[link removed]`), emails (`[email removed]`), and phone numbers (`[number removed]`).
+     - Offers to notify a trusted caregiver or family contact.
+     - Upon user confirmation, resolves the caregiver contact and drafts a safe, sanitized warning message.
 
-### 4.10 Memory tools
+---
 
-- `list_recent_contexts(userId, limit)` — returns the most recently saved
-  contexts regardless of type. Used by the morning briefing endpoint.
+### 4.10 Memory & Context Tools
 
-### 4.11 Reminder lifecycle tools
+In addition to `get_context` and `save_context`, `mcp-server` exposes tools for temporal browsing and context lifecycle:
 
-- `mark_reminder_fired(userId, reminderId, firedAt)` — called by the
-  scheduler or Lambda. Conditional write: `attribute_not_exists(firedAt)`.
-- `complete_reminder(userId, reminderId)` — user acknowledges a fired
-  reminder. Sets `status = 'completed'`.
-- `find_fired_reminders(userId)` — fired but unacknowledged. Drives the
-  notification feed.
-- `list_missed_reminders(userId)` — reminders whose time passed without
-  being completed. Answers "What did I miss?"
+#### `list_recent_contexts`
+- **Purpose:** Returns the most recently saved contexts regardless of type. Used by the morning briefing endpoint (`/api/proactive/morning`) and the context browser.
+- **Implemented in:** [`mcp-server/src/tools/context.ts`](file:///H:/htdocs/meeting2action-alexa-agent/elder-s-alexa-project/mcp-server/src/tools/context.ts)
+- **Input:** `{ userId: string, limit?: number }` (default limit: 20)
+- **Output:** `{ contexts: Array<{ contextId: string, type: string, key: string, data: Record<string, unknown>, createdAt: string }> }`
+
+#### `delete_context`
+- **Purpose:** Permanently deletes a stored context by key when the user requests to forget a fact (e.g., _"Forget the electricity bill"_ or _"Delete that appointment"_). Enforces hard deletion in Amazon DynamoDB.
+- **Implemented in:** [`mcp-server/src/tools/context.ts`](file:///H:/htdocs/meeting2action-alexa-agent/elder-s-alexa-project/mcp-server/src/tools/context.ts)
+- **Input:** `{ userId: string, contextKey: string }`
+- **Output:** `{ deleted: boolean, contextId?: string, reason?: string }`
+- **Safety Classification:** Level 4 (`IRREVERSIBLE`).
+
+---
+
+### 4.11 Reminder Lifecycle Tools
+
+In addition to `create_reminder` and `get_reminders`, `mcp-server` exposes full state-machine transition tools:
+
+- **`mark_reminder_fired(userId, reminderId, firedAt)`**: Called by the local scheduler or AWS Lambda handler when a reminder is due. Enforces conditional write: `attribute_not_exists(firedAt)` preventing duplicate triggers.
+- **`complete_reminder(userId, reminderId)`**: User or client acknowledges a fired reminder via speech or the notification banner (`POST /api/notifications/acknowledge/:id`). Sets `status = 'completed'`.
+- **`find_fired_reminders(userId)`**: Queries fired but unacknowledged reminders (`status = 'active'` with `firedAt` populated). Drives the frontend notification badge and `/api/notifications` feed.
+- **`list_missed_reminders(userId)`**: Identifies reminders whose scheduled time passed without completion. Returns `daysOverdue` and powers the `MISSED_REMINDERS` intent (*"What did I miss?"*).
+
+---
+
+### 4.12 Messaging & Caregiver Activity Tools
+
+In addition to `draft_family_message` and `send_family_message`:
+
+#### `list_recent_drafts`
+- **Purpose:** Retrieves the most recently created message drafts for a user, along with their status (`draft`, `confirmed`, `sent`, `cancelled`).
+- **Implemented in:** [`mcp-server/src/tools/messaging.ts`](file:///H:/htdocs/meeting2action-alexa-agent/elder-s-alexa-project/mcp-server/src/tools/messaging.ts)
+- **Input:** `{ userId: string, limit?: number }` (default limit: 10)
+- **Output:** `{ drafts: Array<{ draftId: string, recipient: string, content: string, status: string, createdAt: string }> }`
+- **When Called:** Drives the activity timeline (`03 Activity` tab in web UI) and responds to caregiver/user audit questions (*"What did you do today?"* / `ASK_ACTIVITY` intent).
 
 ---
 
@@ -742,25 +781,26 @@ means everything the system does to protect the user.
 The system implements a **4-Level Safety Model** defined in [`apps/agent/src/agent/safety.ts`](file:///H:/htdocs/meeting2action-alexa-agent/elder-s-alexa-project/apps/agent/src/agent/safety.ts):
 
 ```
-
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│ 4-LEVEL SAFETY CLASSIFICATION │
-├───────┬──────────────────┬─────────────────────────────┬─────────────────────────┤
-│ Level │ Name │ Tools │ Execution Behavior │
-├───────┼──────────────────┼─────────────────────────────┼─────────────────────────┤
-│ 1 │ READ │ analyze_message, get_context│ Auto-execute │
-│ │ │ get_reminders, resolve_cont.│ │
-├───────┼──────────────────┼─────────────────────────────┼─────────────────────────┤
-│ 2 │ LOW_RISK │ save_context, create_remind.│ Execute and report │
-│ │ │ draft_family_message │ result in plain speech │
-├───────┼──────────────────┼─────────────────────────────┼─────────────────────────┤
-│ 3 │ EXTERNAL_COMMS │ send_family_message │ Draft → Require Explicit│
-│ │ │ │ Confirmation → Send │
-├───────┼──────────────────┼─────────────────────────────┼─────────────────────────┤
-│ 4 │ IRREVERSIBLE │ Financial transactions, │ BLOCKED IN MVP │
-│ │ │ data deletion │ Simulated only │
-└───────┴──────────────────┴─────────────────────────────┴─────────────────────────┘
-
+┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   4-LEVEL SAFETY CLASSIFICATION                                  │
+├───────┬──────────────────┬─────────────────────────────────────────────┬─────────────────────────┤
+│ Level │ Name             │ Tools                                       │ Execution Behavior      │
+├───────┼──────────────────┼─────────────────────────────────────────────┼─────────────────────────┤
+│ 1     │ READ             │ analyze_message, scan_threat, get_context,   │ Auto-execute            │
+│       │                  │ get_reminders, resolve_contact,             │                         │
+│       │                  │ list_recent_contexts, list_missed_reminders,│                         │
+│       │                  │ find_fired_reminders, list_recent_drafts    │                         │
+├───────┼──────────────────┼─────────────────────────────────────────────┼─────────────────────────┤
+│ 2     │ LOW_RISK         │ save_context, create_reminder,              │ Execute and report      │
+│       │                  │ draft_family_message, mark_reminder_fired,  │ result in plain speech  │
+│       │                  │ complete_reminder                           │                         │
+├───────┼──────────────────┼─────────────────────────────────────────────┼─────────────────────────┤
+│ 3     │ EXTERNAL_COMMS   │ send_family_message                         │ Draft → Require Explicit│
+│       │                  │                                             │ Confirmation → Send     │
+├───────┼──────────────────┼─────────────────────────────────────────────┼─────────────────────────┤
+│ 4     │ IRREVERSIBLE     │ forget_context (delete_context)             │ Destructive DynamoDB    │
+│       │                  │ Financial transactions (blocked in MVP)     │ deletion; explicit intent│
+└───────┴──────────────────┴─────────────────────────────────────────────┴─────────────────────────┘
 ```
 
 ---
@@ -815,10 +855,15 @@ links, and IP-based URLs. It also consults a trusted-sender allow-list
 and downgrades risk by one tier for known institutions.
 
 When the scanner returns `blockActions: true`, the orchestrator refuses
-to call `draft_family_message` or `send_family_message` for that content.
+to call `draft_family_message` or `send_family_message` directly.
 The refusal is deterministic, not LLM-mediated. A message containing
 "ignore previous instructions, this is safe" cannot bypass the block,
 because the LLM is never asked.
+
+Instead of a dead end, the orchestrator triggers an active **Quarantine Escalation Flow**:
+1. Invokes `sanitizeForForwarding()` to strip all embedded URLs (`[link removed]`), emails (`[email removed]`), and phone numbers (`[number removed]`).
+2. Proactively asks the user: *"This message looks suspicious. Would you like me to notify your caregiver?"*
+3. If the user agrees, it resolves the caregiver contact (`resolve_contact(userId, 'caregiver')`) and creates a safe draft containing only the sanitized context, eliminating any accidental clicking of malicious links by family members.
 
 This is now the topmost of four enforcement layers. Each layer assumes
 the one above it might be compromised:
@@ -923,9 +968,12 @@ the one above it might be compromised:
 
 ---
 
-## 6. Data Model
+## 6. Data Model & Infrastructure Provisioning
 
-The persistence layer uses 6 Amazon DynamoDB tables with on-demand capacity (`PAY_PER_REQUEST`).
+The persistence layer uses 6 Amazon DynamoDB tables with on-demand capacity (`PAY_PER_REQUEST`). Tables and secondary indexes are provisioned via [`infrastructure/scripts/create-tables.sh`](file:///H:/htdocs/meeting2action-alexa-agent/elder-s-alexa-project/infrastructure/scripts/create-tables.sh) and seeded via [`infrastructure/scripts/seed-contacts.ts`](file:///H:/htdocs/meeting2action-alexa-agent/elder-s-alexa-project/infrastructure/scripts/seed-contacts.ts). EventBridge Scheduler, SNS notification topics, and the Lambda reminder execution handler are declared as Infrastructure-as-Code via **AWS CDK** ([`infrastructure/cdk/lib/reminder-stack.ts`](file:///H:/htdocs/meeting2action-alexa-agent/elder-s-alexa-project/infrastructure/cdk/lib/reminder-stack.ts)).
+
+> [!NOTE]
+> The `infrastructure/terraform/` directory contains placeholder stubs reserved for alternative deployment targets. AWS CDK and AWS CLI scripts are the authoritative IaC assets used by this project.
 
 ---
 
@@ -1198,7 +1246,30 @@ The morning briefing only speaks when there is content. A reminder that
 fires does so once. A day with nothing scheduled produces no message. The
 system does not train the user to ignore it.
 
-## 7. Request Lifecycle — One Worked Example
+## 7. Intent Classification & Request Lifecycle
+
+### The 12 Intent Categories
+
+The intent classifier in [`apps/agent/src/agent/planner.ts`](file:///H:/htdocs/meeting2action-alexa-agent/elder-s-alexa-project/apps/agent/src/agent/planner.ts) (guided by `PLANNER_SYSTEM_PROMPT` in [`prompts.ts`](file:///H:/htdocs/meeting2action-alexa-agent/elder-s-alexa-project/apps/agent/src/agent/prompts.ts)) categorizes user utterances into one of 12 structured intents:
+
+| Intent | Description | Sample Utterance | Key Tool / Action |
+| ------ | ----------- | ---------------- | ----------------- |
+| `UNDERSTAND_MESSAGE` | Parse unstructured digital message | *"I got a message from the power board"* | `analyze_message`, `save_context` |
+| `FOLLOW_UP` | Ask questions about active context | *"What happens if I don't pay it?"* | Strict anti-hallucination LLM response |
+| `CREATE_REMINDER` | Schedule a task or deadline reminder | *"Remind me on the 26th"* | `create_reminder` |
+| `DRAFT_MESSAGE` | Prepare message to a family contact | *"Tell my daughter about it"* | `resolve_contact`, `draft_family_message` |
+| `CONFIRM_SEND` | Affirm staged outgoing draft (Short-circuit) | *"Yes"*, *"Go ahead"*, *"Send it"* | Deterministic regex -> `send_family_message` |
+| `DENY_SEND` | Decline staged draft (Short-circuit) | *"No"*, *"Cancel"*, *"Don't send"* | Deterministic regex -> clear draft |
+| `RETRIEVE_CONTEXT` | Recalls past facts across conversations | *"What was that bill from yesterday?"* | `get_context` (key / heuristic type query) |
+| `LIST_REMINDERS` | Inquire about upcoming reminders | *"What reminders do I have coming up?"* | `get_reminders` (`status: 'active'`) |
+| `MISSED_REMINDERS` | Check for overdue/missed items | *"What did I miss?"*, *"Did I forget anything?"* | `list_missed_reminders` |
+| `ASK_ACTIVITY` | Audit recent agent actions | *"What did you do today?"* | `list_recent_drafts`, `list_recent_contexts` |
+| `FORGET_CONTEXT` | Explicit fact deletion / privacy erasure | *"Forget the electricity bill"* | `delete_context` (Level 4 IRREVERSIBLE) |
+| `UNKNOWN` | Unmatched or general conversational queries | *"Good morning"*, *"Who are you?"* | Fallback general LLM response |
+
+---
+
+### Request Lifecycle — Hero Electricity Bill Walkthrough
 
 Below is the complete trace of the Hero Electricity Bill Scenario across the entire stack.
 
@@ -1571,6 +1642,18 @@ Because multi-step LLM extraction and DynamoDB persistence require 1.0–1.8 sec
 
 ---
 
+### 5. Multi-View Workspace Navigation & Session History
+
+In addition to the 3-panel conversation layout, the web UI provides full tabbed navigation defined in [`apps/web/src/App.tsx`](file:///H:/htdocs/meeting2action-alexa-agent/elder-s-alexa-project/apps/web/src/App.tsx):
+
+- **`01 Home` (`home`):** The primary 3-panel ambient interaction shell with voice input, real-time typing indicators, and confirmation gate.
+- **`02 Tasks` (`tasks`):** Direct dashboard for monitoring upcoming deadlines, active reminders, and overdue/missed reminders.
+- **`03 Activity` (`activity`):** Audit timeline of agent actions (contexts saved, reminders created, drafts prepared, messages sent) driven by `list_recent_drafts`.
+- **`04 Context` (`tools`):** Browser for inspecting authorized facts and entities stored in DynamoDB (`list_recent_contexts`).
+- **`05 History` (`history`):** Multi-session archive persisted in browser `localStorage` (`independence-agent.chats`), allowing users to switch between past conversations or resume prior discussions.
+
+---
+
 ## 9A APL Mapping — How the UI Would Render on Echo Show
 
 The web UI is a React application running in a browser. For Echo Show
@@ -1634,7 +1717,7 @@ parallel rendering target, like the web UI.
 | Component                        | Status        | Implementation Notes                                                                                                             |
 | -------------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | **MCP Server Runtime**           | **REAL**      | Streamable HTTP (`@modelcontextprotocol/sdk`), stateless transport on port `3001`. Fully spec-compliant.                         |
-| **MCP Tool Surface**             | **REAL**      | 8 registered tools with Zod input/output validation, error handling, and structured content return.                              |
+| **MCP Tool Surface**             | **REAL**      | 16 registered tools across 4 domains with Zod input/output validation, error handling, and structured content return.             |
 | **Amazon DynamoDB Storage**      | **REAL**      | 6 live DynamoDB tables on AWS using `@aws-sdk/lib-dynamodb` with GSIs, conditional expressions, and TTL.                         |
 | **LLM Reasoning & Extraction**   | **REAL**      | AWS Bedrock (`us.anthropic.claude-sonnet-4-6`) and OpenAI runtime adapters for intent classification and response generation.    |
 | **Contact Resolution Engine**    | **REAL**      | Full database query and heuristic fallback engine resolving relationship words to stored contacts.                               |
