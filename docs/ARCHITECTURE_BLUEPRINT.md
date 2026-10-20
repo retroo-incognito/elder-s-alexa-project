@@ -9,6 +9,28 @@
 
 ---
 
+### Provider default and Bedrock status
+
+The Bedrock adapter is fully implemented and functional. It is not
+the default because Bedrock model access requires manual approval
+through the AWS console (Model catalog → Claude Sonnet 4.6 → Request
+access). Approval was pending during the submission window.
+
+The default provider is OpenAI because its API keys are self-serve,
+which makes the project reproducible by judges without requiring
+AWS model access.
+
+Both providers share the same `LlmProvider` interface
+(`apps/agent/src/lib/llm/types.ts`). Switching is one environment
+variable per process:
+
+    LLM_PROVIDER=bedrock      # agent
+    ANALYZE_PROVIDER=bedrock  # mcp-server
+
+The Bedrock implementation uses the Converse API with structured
+outputs (`outputConfig.textFormat.jsonSchema`) and the
+`us.anthropic.claude-sonnet-4-6` cross-region inference profile.
+
 ## 1. Executive Summary
 
 The **Alexa+ Everyday Independence Agent** is a voice-first ambient orchestration system designed to help users understand complex, high-cognitive-load digital messages (such as electricity bills, clinic appointment updates, municipal notifications, and bank alerts) and safely execute the real-world tasks that follow from them. Everyday digital services routinely assume that users can interpret opaque account numbers, navigate complex multi-screen mobile apps, remember deadlines across weeks, and manage reminders across disparate tools. For many adults—particularly older adults or individuals managing cognitive fatigue—this gap creates significant friction and anxiety. The Everyday Independence Agent eliminates this friction by converting ambiguous text and documents into verified structured facts, managing persistent cross-session memory, scheduling contextual reminders, and preparing outbound family communications through an intuitive conversational interface.
@@ -1580,6 +1602,28 @@ Cross-conversation recall operates without keeping conversational memory open:
 5. The retrieved item is loaded into `state.activeContext` for the current conversation, restoring full conversational context seamlessly across session boundaries.
 
 ---
+
+### Provider default and Bedrock status
+
+The Bedrock adapter is fully implemented and functional. It is not
+the default because Bedrock model access requires manual approval
+through the AWS console (Model catalog → Claude Sonnet 4.6 → Request
+access). Approval was pending during the submission window.
+
+The default provider is OpenAI because its API keys are self-serve,
+which makes the project reproducible by judges without requiring
+AWS model access.
+
+Both providers share the same `LlmProvider` interface
+(`apps/agent/src/lib/llm/types.ts`). Switching is one environment
+variable per process:
+
+    LLM_PROVIDER=bedrock      # agent
+    ANALYZE_PROVIDER=bedrock  # mcp-server
+
+The Bedrock implementation uses the Converse API with structured
+outputs (`outputConfig.textFormat.jsonSchema`) and the
+`us.anthropic.claude-sonnet-4-6` cross-region inference profile.
 
 ## 9. The Frontend
 
