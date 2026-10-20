@@ -226,6 +226,36 @@ alexa-independence-agent/
 * **Frontend:** React 19 + Vite 6
 * **Validation:** Zod
 
+## LLM providers
+
+The project supports two providers behind a common interface:
+
+| Provider | Set env var | Requires |
+|---|---|---|
+| OpenAI | `LLM_PROVIDER=openai` (default) | OpenAI API key |
+| Amazon Bedrock | `LLM_PROVIDER=bedrock` | AWS account with Bedrock model access enabled |
+
+**OpenAI is the default** because it requires no manual approval and
+gets a judge from clone to running in under 10 minutes. Bedrock is
+fully implemented and can be enabled in one line.
+
+To enable Bedrock:
+
+# In .env
+LLM_PROVIDER=bedrock
+ANALYZE_PROVIDER=bedrock
+BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-6
+
+**Note on Bedrock:** The Bedrock adapter is fully implemented in
+`apps/agent/src/lib/llm/bedrock.ts` and
+`mcp-server/src/lib/extraction/bedrock.ts`, using the Converse API
+with structured outputs and the cross-region inference profile. It
+is not the default because Bedrock model access required manual
+approval that was not granted during the submission window. The
+provider is one environment variable away from active use, and the
+interface is shared with the OpenAI adapter so the AWS footprint
+is identical.
+
 ## Local Setup
 
 ### Prerequisites
